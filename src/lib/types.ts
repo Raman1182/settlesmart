@@ -52,6 +52,7 @@ export interface Friendship {
   requesterId: string;
   receiverId: string;
   status: 'pending' | 'accepted' | 'declined';
+  participantIds: string[];
   createdAt: any;
 }
 
@@ -61,4 +62,13 @@ export interface Message {
   senderId: string;
   text: string;
   timestamp: any;
+  read: boolean;
+  type?: 'system' | 'user';
+}
+
+export interface Chat {
+    id: string;
+    participants: User[];
+    lastMessage: Message | null;
+    unreadCount: number;
 }

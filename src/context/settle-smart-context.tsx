@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { createContext, useContext, useState, useMemo, useCallback, useEffect } from "react";
@@ -5,7 +6,7 @@ import { initializeApp, getApps, getApp, type FirebaseApp } from "firebase/app";
 import { getAuth, onAuthStateChanged, User as FirebaseUser, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut, type Auth } from "firebase/auth";
 import { getFirestore, collection, addDoc, query, where, onSnapshot, doc, updateDoc, serverTimestamp, getDocs, orderBy, deleteDoc, getDoc, setDoc, arrayUnion, arrayRemove, writeBatch, type Firestore, enableIndexedDbPersistence, limit } from "firebase/firestore";
 import { firebaseConfig } from "@/lib/firebase";
-import type { User, Group, Expense, Participant, UnequalSplit, ChecklistItem, Friendship, Message } from "@/lib/types";
+import type { User, Group, Expense, Participant, UnequalSplit, ChecklistItem, Friendship, Message, Chat } from "@/lib/types";
 
 interface AddExpenseData {
   description: string;
@@ -26,6 +27,7 @@ interface SettleSmartContextType {
   groups: Group[];
   expenses: Expense[];
   friendships: Friendship[];
+  chats: Chat[];
   addExpense: (expense: AddExpenseData) => void;
   balances: {
     totalOwedToUser: number;
@@ -54,7 +56,8 @@ interface SettleSmartContextType {
   declineFriendRequest: (friendshipId: string) => Promise<void>;
   removeFriend: (friendId: string) => Promise<void>;
   getChatMessages: (friendId: string, callback: (messages: Message[]) => void) => () => void;
-  sendMessage: (friendId: string, text: string) => Promise<void>;
+  sendMessage: (friendId: string, text: string, type?: 'user' | 'system') => Promise<void>;
+  markMessagesAsRead: (chatId: string) => Promise<void>;
   signUp: (email: string, pass: string) => Promise<any>;
   signIn: (email: string, pass: string) => Promise<any>;
   signOut: () => Promise<void>;
@@ -71,10 +74,15 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const [groups, setGroups] = useState<Group[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [friendships, setFriendships] = useState<Friendship[]>([]);
+  const [chats, setChats] = useState<Chat[]>([]);
   const [groupChecklists, setGroupChecklists] = useState<{ [groupId: string]: ChecklistItem[] }>({});
 
   const [auth, setAuth] = useState<Auth | null>(null);
   const [db, setDb] = useState<Firestore | null>(null);
+
+  const findUserById = useCallback((id: string) => {
+      return users.find(u => u.id === id);
+  }, [users]);
 
   useEffect(() => {
     const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
@@ -166,6 +174,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
         setGroups([]);
         setExpenses([]);
         setFriendships([]);
+        setChats([]);
         setGroupChecklists({});
     }
 
@@ -215,6 +224,61 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
         }
     }, [db, groups, isAuthLoading]);
 
+    // Effect for chats
+  useEffect(() => {
+    if (!currentUser || !db || friendships.length === 0) {
+        setChats([]);
+        return;
+    }
+
+    const myFriends = friendships
+        .filter(f => f.status === 'accepted')
+        .map(f => f.requesterId === currentUser.id ? f.receiverId : f.requesterId);
+
+    if (myFriends.length === 0) {
+        setChats([]);
+        return;
+    }
+
+    const unsubscribers = myFriends.map(friendId => {
+        const chatId = getChatId(currentUser.id, friendId);
+        const q = query(collection(db, `chats/${chatId}/messages`), orderBy('timestamp', 'desc'), limit(1));
+        
+        return onSnapshot(q, (snapshot) => {
+            const lastMessage = snapshot.docs.length > 0 ? {
+                id: snapshot.docs[0].id,
+                ...snapshot.docs[0].data(),
+                timestamp: snapshot.docs[0].data().timestamp?.toDate().toISOString()
+            } as Message : null;
+            
+            const unreadQuery = query(collection(db, `chats/${chatId}/messages`), where('senderId', '==', friendId), where('read', '==', false));
+            getDocs(unreadQuery).then(unreadSnapshot => {
+                const friendUser = findUserById(friendId);
+                const chat: Chat = {
+                    id: chatId,
+                    participants: [currentUser, friendUser!].filter(Boolean),
+                    lastMessage: lastMessage,
+                    unreadCount: unreadSnapshot.size
+                };
+                
+                setChats(prevChats => {
+                    const existingIndex = prevChats.findIndex(c => c.id === chatId);
+                    if (existingIndex > -1) {
+                        const newChats = [...prevChats];
+                        newChats[existingIndex] = chat;
+                        return newChats;
+                    } else {
+                        return [...prevChats, chat];
+                    }
+                });
+            });
+        });
+    });
+
+    return () => unsubscribers.forEach(unsub => unsub());
+
+  }, [currentUser, db, friendships, findUserById]);
+
   const signUp = async (email: string, pass: string) => {
     if (!auth) throw new Error("Auth not initialized");
     return createUserWithEmailAndPassword(auth, email, pass);
@@ -229,10 +293,6 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     if (!auth) throw new Error("Auth not initialized");
     return firebaseSignOut(auth);
   }
-
-  const findUserById = useCallback((id: string) => {
-      return users.find(u => u.id === id);
-  }, [users]);
   
   const addAdHocUser = async (name: string): Promise<User> => {
     if (!db) throw new Error("DB not initialized");
@@ -329,17 +389,22 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   
   const settleFriendDebt = async (friendId: string) => {
     if (!currentUser || !db) throw new Error("Not authenticated or DB not initialized");
-    const q = query(collection(db, "expenses"), where('splitWith', 'array-contains', currentUser.id));
+    const q = query(
+      collection(db, "expenses"), 
+      where('splitWith', 'array-contains', currentUser.id)
+    );
     const snapshot = await getDocs(q);
     const batch = writeBatch(db);
     snapshot.forEach(doc => {
         const expense = doc.data() as Expense;
         const participants = new Set(expense.splitWith);
-        if (participants.size === 2 && participants.has(friendId)) {
+        // Only settle 1-on-1 expenses
+        if (participants.size === 2 && participants.has(friendId) && !expense.groupId) {
             batch.delete(doc.ref);
         }
     });
     await batch.commit();
+    await sendMessage(friendId, `${currentUser.name} has marked all debts between you as settled.`, 'system');
   }
   
   const settleAllInGroup = async (groupId: string) => {
@@ -418,16 +483,30 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     });
   };
 
-  const sendMessage = async (friendId: string, text: string) => {
+  const sendMessage = async (friendId: string, text: string, type: 'user' | 'system' = 'user') => {
     if (!currentUser || !db) throw new Error("Not authenticated");
     const chatId = getChatId(currentUser.id, friendId);
     await addDoc(collection(db, `chats/${chatId}/messages`), {
       chatId,
       senderId: currentUser.id,
       text,
+      type,
+      read: false,
       timestamp: serverTimestamp(),
     });
   };
+
+  const markMessagesAsRead = async (chatId: string) => {
+      if (!currentUser || !db) return;
+      const unreadMessagesQuery = query(collection(db, `chats/${chatId}/messages`), where('read', '==', false), where('senderId', '!=', currentUser.id));
+      const unreadSnapshot = await getDocs(unreadMessagesQuery);
+      
+      const batch = writeBatch(db);
+      unreadSnapshot.forEach(doc => {
+          batch.update(doc.ref, { read: true });
+      });
+      await batch.commit();
+  }
 
   const calculateSettlements = useCallback((expensesToCalculate: Expense[], allParticipantIds: string[]) => {
     const userBalances: { [key: string]: number } = {};
@@ -558,6 +637,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     groups,
     expenses,
     friendships,
+    chats,
     addExpense,
     balances,
     getGroupBalances,
@@ -577,6 +657,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     removeFriend,
     getChatMessages,
     sendMessage,
+    markMessagesAsRead,
     signUp,
     signIn,
     signOut,
@@ -597,3 +678,5 @@ export const useSettleSmart = (): SettleSmartContextType => {
   }
   return context;
 };
+
+    

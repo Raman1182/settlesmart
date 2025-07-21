@@ -1,18 +1,106 @@
 "use client";
 
-import { useState, useEffect, useRef, useTransition } from "react";
+import { useState, useEffect, useRef, useTransition, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useSettleSmart } from "@/context/settle-smart-context";
 import { Header } from "@/components/header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { ArrowLeft, Send, Loader2 } from "lucide-react";
+import { ArrowLeft, Send, Loader2, Info } from "lucide-react";
 import type { Message } from "@/lib/types";
-import { cn } from "@/lib/utils";
+import { cn, formatCurrency } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Card } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { format } from "date-fns";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
+
+function ChatSettleUp({ friendId }: { friendId: string }) {
+    const { currentUser, findUserById, settleFriendDebt, sendMessage, expenses } = useSettleSmart();
+    const friend = findUserById(friendId);
+
+    const netBalance = useMemo(() => {
+        if (!currentUser || !friend) return 0;
+        let balance = 0;
+        const relatedExpenses = expenses.filter(e => {
+            const participants = new Set(e.splitWith);
+            return !e.groupId && participants.has(currentUser.id) && participants.has(friendId) && participants.size === 2;
+        });
+
+        relatedExpenses.forEach(e => {
+            const amountPerPerson = e.amount / 2;
+            if (e.paidById === currentUser.id) {
+                balance += amountPerPerson;
+            } else {
+                balance -= amountPerPerson;
+            }
+        });
+        return balance;
+    }, [currentUser, friend, expenses]);
+
+    const handleSettle = async () => {
+        await settleFriendDebt(friendId);
+    }
+
+    const handleRemind = async () => {
+        if (!currentUser || !friend) return;
+        const reminderText = `Just a friendly reminder to settle our balance of ${formatCurrency(Math.abs(netBalance))}. Thanks!`;
+        await sendMessage(friendId, reminderText);
+    }
+
+    if (!friend) return null;
+    const isSettled = Math.abs(netBalance) < 0.01;
+    const friendOwes = netBalance > 0;
+    const userOwes = netBalance < 0;
+
+    return (
+        <Card className="mb-4">
+            <CardContent className="p-4 flex items-center justify-between">
+                <div>
+                    <p className="font-bold">
+                        {isSettled && "You are all settled up!"}
+                        {friendOwes && `${friend.name} owes you ${formatCurrency(netBalance)}`}
+                        {userOwes && `You owe ${friend.name} ${formatCurrency(Math.abs(netBalance))}`}
+                    </p>
+                    <p className="text-xs text-muted-foreground">Across all your 1-on-1 expenses.</p>
+                </div>
+                <div className="flex gap-2">
+                    {friendOwes && <Button size="sm" onClick={handleRemind}>Remind</Button>}
+                    {!isSettled && (
+                        <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                                <Button size="sm" variant="secondary">Settle All</Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                                <AlertDialogHeader>
+                                    <AlertDialogTitle>Settle all debts with {friend.name}?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                        This will delete all 1-on-1 expenses between you and {friend.name}, marking everything as paid. This cannot be undone.
+                                    </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                    <AlertDialogAction onClick={handleSettle}>Yes, Settle Up</AlertDialogAction>
+                                </AlertDialogFooter>
+                            </AlertDialogContent>
+                        </AlertDialog>
+                    )}
+                </div>
+            </CardContent>
+        </Card>
+    );
+}
+
 
 export default function ChatPage() {
   const { friendId } = useParams();
@@ -22,6 +110,7 @@ export default function ChatPage() {
     findUserById,
     getChatMessages,
     sendMessage,
+    markMessagesAsRead,
     isAuthLoading,
   } = useSettleSmart();
   
@@ -40,13 +129,15 @@ export default function ChatPage() {
 
   useEffect(() => {
     if (!currentUser || !friendId) return;
+    const chatId = [currentUser.id, friendId].sort().join('_');
+    markMessagesAsRead(chatId);
     
     const unsubscribe = getChatMessages(friendId as string, (newMessages) => {
         setMessages(newMessages);
     });
 
     return () => unsubscribe();
-  }, [currentUser, friendId, getChatMessages]);
+  }, [currentUser, friendId, getChatMessages, markMessagesAsRead]);
 
   useEffect(() => {
     if (scrollAreaRef.current) {
@@ -65,11 +156,10 @@ export default function ChatPage() {
 
     startSendingTransition(async () => {
       try {
-        await sendMessage(friendId as string, input);
+        await sendMessage(friendId as string, input, 'user');
         setInput("");
       } catch (error) {
         console.error("Failed to send message", error);
-        // Optionally show a toast error
       }
     });
   };
@@ -98,6 +188,7 @@ export default function ChatPage() {
                 <h1 className="text-xl font-bold">{friend.name}</h1>
             </div>
         </div>
+        <ChatSettleUp friendId={friend.id} />
         <Card className="flex-1 flex flex-col p-0">
           <ScrollArea className="flex-1" ref={scrollAreaRef}>
             <div className="p-4 space-y-6">
@@ -105,6 +196,14 @@ export default function ChatPage() {
                 const showAvatar = index === 0 || messages[index-1].senderId !== message.senderId;
                 const isCurrentUser = message.senderId === currentUser.id;
                 const sender = isCurrentUser ? currentUser : friend;
+
+                if (message.type === 'system') {
+                    return (
+                        <div key={message.id} className="flex items-center justify-center gap-2 text-xs text-muted-foreground my-2">
+                           <Info className="h-3 w-3" /> <span>{message.text}</span>
+                        </div>
+                    )
+                }
 
                 return(
                     <div
