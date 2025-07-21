@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useMemo, useState, useTransition, useEffect, useCallback } from "react";
+import { useMemo, useState, useTransition, useEffect } from "react";
 import { Header } from "@/components/header";
 import { useSettleSmart } from "@/context/settle-smart-context";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";

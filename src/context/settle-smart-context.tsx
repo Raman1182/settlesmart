@@ -4,7 +4,7 @@
 import React, { createContext, useContext, useState, useMemo, useCallback, useEffect } from "react";
 import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged, User as FirebaseUser, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut } from "firebase/auth";
-import { collection, addDoc, query, where, onSnapshot, doc, updateDoc, serverTimestamp, getDocs, orderBy } from "firebase/firestore";
+import { collection, addDoc, query, where, onSnapshot, doc, updateDoc, serverTimestamp, getDocs, orderBy, deleteDoc } from "firebase/firestore";
 import { sendFriendRequest, respondToFriendRequest } from "@/ai/flows/friend-request-flow";
 
 import type { User, Group, Expense, Participant, UnequalSplit, ChecklistItem, Message, Friendship } from "@/lib/types";
@@ -91,33 +91,20 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
         if (user) {
-            // Add user to 'users' collection in Firestore if not exists
-            const userRef = doc(db, "users", user.uid);
-            const userDoc = await getDocs(query(collection(db, "users"), where("email", "==", user.email)));
-            let userId = user.uid;
-            
-            if (userDoc.empty) {
-                 const newUserEntry = {
+            let userRecord = users.find(u => u.email === user.email);
+            if (!userRecord) {
+                // If user doesn't exist in our mock data, create them
+                userRecord = {
+                    id: user.uid,
                     email: user.email!,
                     name: user.email!.split('@')[0],
                     avatar: `https://placehold.co/100x100?text=${user.email!.charAt(0).toUpperCase()}`,
                     initials: user.email!.charAt(0).toUpperCase(),
-                 };
-                 await addDoc(collection(db, "users"), newUserEntry);
-                 userId = (await getDocs(query(collection(db, "users"), where("email", "==", user.email)))).docs[0].id;
-
-            } else {
-                 userId = userDoc.docs[0].id;
+                };
+                setUsers(prev => [...prev, userRecord!]);
+                appDataStore.users.push(userRecord);
             }
-
-            const currentUserData: User = { id: userId, ...userDoc.docs[0].data() } as User;
-            setCurrentUser(currentUserData);
-            
-            // Sync all users from Firestore to local state
-            const usersSnapshot = await getDocs(collection(db, "users"));
-            const allUsers = usersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
-            setUsers(allUsers);
-
+            setCurrentUser(userRecord);
         } else {
             setCurrentUser(null);
         }
@@ -125,7 +112,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     });
 
     return () => unsubscribeAuth();
-  }, []);
+  }, [users]); // Depend on users array to re-run if it changes
 
   useEffect(() => {
     if (!currentUser) {
@@ -134,19 +121,27 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
         return;
     };
 
-    // Listener for all messages where current user is sender or receiver
-    const qMessages = query(collection(db, "messages"), where("chatId", "array-contains", currentUser.id));
-    const unsubscribeMessages = onSnapshot(qMessages, (querySnapshot) => {
-        const receivedMessages: Message[] = [];
-        querySnapshot.forEach((doc) => {
-            const data = doc.data();
-            receivedMessages.push({ 
-                id: doc.id,
-                ...data,
-                createdAt: data.createdAt?.toDate().toISOString() || new Date().toISOString()
-            } as Message);
+    const chatsQuery = query(collection(db, 'chats'));
+    const unsubscribeChats = onSnapshot(chatsQuery, (snapshot) => {
+        const userChatIds: string[] = [];
+        snapshot.forEach(doc => {
+            if(doc.data().members.includes(currentUser.id)) {
+                userChatIds.push(doc.id);
+            }
         });
-        setMessages(receivedMessages.sort((a,b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()));
+
+        if (userChatIds.length > 0) {
+            const messagesQuery = query(collection(db, 'messages'), where('chatId', 'in', userChatIds));
+            const unsubscribeMessages = onSnapshot(messagesQuery, (msgSnapshot) => {
+                 const receivedMessages: Message[] = msgSnapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data(),
+                    createdAt: doc.data().createdAt?.toDate().toISOString() || new Date().toISOString()
+                 } as Message));
+                 setMessages(receivedMessages.sort((a,b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()));
+            });
+            return () => unsubscribeMessages();
+        }
     });
     
     // Listener for friendships
@@ -160,7 +155,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     });
     
     return () => {
-        unsubscribeMessages();
+        unsubscribeChats();
         unsubscribeFriendships();
     };
   }, [currentUser]);
@@ -168,6 +163,15 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
   const signUp = async (email: string, pass: string) => {
     const result = await createUserWithEmailAndPassword(auth, email, pass);
+    const newUserRecord = {
+        id: result.user.uid,
+        email: email,
+        name: email.split('@')[0],
+        avatar: `https://placehold.co/100x100?text=${email.charAt(0).toUpperCase()}`,
+        initials: email.charAt(0).toUpperCase(),
+    };
+    appDataStore.users.push(newUserRecord);
+    setUsers([...appDataStore.users]);
     return result;
   }
 
@@ -189,7 +193,8 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   }
 
   const rejectFriendRequest = async (friendshipId: string) => {
-     await respondToFriendRequest({ friendshipId, response: 'rejected' });
+     const friendshipRef = doc(db, 'friendships', friendshipId);
+     await deleteDoc(friendshipRef);
   }
   
    const getChatMessages = (friendId: string, callback: (messages: Message[]) => void) => {
@@ -221,6 +226,17 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const sendMessage = async (receiverId: string, text: string) => {
     if (!currentUser) throw new Error("Not authenticated");
     const chatId = [currentUser.id, receiverId].sort().join('_');
+    
+    // Check if chat exists, if not create it
+    const chatRef = doc(db, 'chats', chatId);
+    const chatDoc = await getDocs(query(collection(db, 'chats'), where('__name__', '==', chatId)));
+    if(chatDoc.empty) {
+        await addDoc(collection(db, 'chats'), {
+            id: chatId,
+            members: [currentUser.id, receiverId]
+        });
+    }
+
     await addDoc(collection(db, "messages"), {
       chatId,
       senderId: currentUser.id,
