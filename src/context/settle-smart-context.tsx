@@ -40,7 +40,9 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   
   const balances = useMemo(() => {
     const balancesByUser: Record<string, Record<string, number>> = {};
-    users.forEach(user => balancesByUser[user.id] = {});
+    users.forEach(user => {
+      balancesByUser[user.id] = {};
+    });
 
     expenses.forEach(expense => {
         const share = expense.amount / expense.splitWith.length;
