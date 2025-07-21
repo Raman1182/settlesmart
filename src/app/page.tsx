@@ -21,7 +21,7 @@ export default function Home() {
     return (
        <div className="flex items-center justify-center min-h-screen bg-background">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
-        <p className="ml-4">Loading user data...</p>
+        <p className="ml-4">Connecting to SettleSmart...</p>
       </div>
     );
   }

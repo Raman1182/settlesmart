@@ -2,10 +2,10 @@
 "use client";
 
 import React, { createContext, useContext, useState, useMemo, useCallback, useEffect } from "react";
-import { auth, db } from "@/lib/firebase";
-import { onAuthStateChanged, User as FirebaseUser, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut } from "firebase/auth";
-import { collection, addDoc, query, where, onSnapshot, doc, updateDoc, serverTimestamp, getDocs, orderBy, deleteDoc, getDoc, setDoc, arrayUnion, arrayRemove, writeBatch } from "firebase/firestore";
-
+import { initializeApp, getApps, getApp, type FirebaseApp } from "firebase/app";
+import { getAuth, onAuthStateChanged, User as FirebaseUser, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut, type Auth } from "firebase/auth";
+import { getFirestore, collection, addDoc, query, where, onSnapshot, doc, updateDoc, serverTimestamp, getDocs, orderBy, deleteDoc, getDoc, setDoc, arrayUnion, arrayRemove, writeBatch, type Firestore } from "firebase/firestore";
+import { firebaseConfig } from "@/lib/firebase";
 import type { User, Group, Expense, Participant, UnequalSplit, ChecklistItem, Message, Friendship } from "@/lib/types";
 
 interface AddExpenseData {
@@ -76,12 +76,23 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const [messages, setMessages] = useState<Message[]>([]);
   const [friendships, setFriendships] = useState<Friendship[]>([]);
 
+  // Firebase services state
+  const [auth, setAuth] = useState<Auth | null>(null);
+  const [db, setDb] = useState<Firestore | null>(null);
+
 
   useEffect(() => {
-    setIsAuthLoading(true);
-    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
+    // Initialize Firebase
+    const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+    const authInstance = getAuth(app);
+    const dbInstance = getFirestore(app);
+    setAuth(authInstance);
+    setDb(dbInstance);
+
+    // Set up auth state listener
+    const unsubscribeAuth = onAuthStateChanged(authInstance, async (user) => {
         if (user) {
-            const userRef = doc(db, "users", user.uid);
+            const userRef = doc(dbInstance, "users", user.uid);
             const userSnap = await getDoc(userRef);
             if (userSnap.exists()) {
                 setCurrentUser({ id: user.uid, ...userSnap.data() } as User);
@@ -100,6 +111,13 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
             }
         } else {
             setCurrentUser(null);
+            // Reset all data states on logout
+            setUsers([]);
+            setGroups([]);
+            setExpenses([]);
+            setFriendships([]);
+            setMessages([]);
+            setGroupChecklists({});
         }
         setIsAuthLoading(false);
     });
@@ -109,9 +127,9 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     };
   }, []);
 
-  // Effect for groups, friendships, users
+  // Effect for users, groups, friendships
   useEffect(() => {
-    if (!currentUser?.id) {
+    if (!currentUser?.id || !db) {
         setGroups([]);
         setExpenses([]);
         setFriendships([]);
@@ -133,38 +151,6 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     const unsubscribeGroups = onSnapshot(qGroups, (snapshot) => {
         const userGroups: Group[] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data()} as Group));
         setGroups(userGroups);
-
-        const groupIds = userGroups.map(g => g.id);
-        
-        // Guard against empty array for 'in' query
-        if (groupIds.length === 0) {
-            setExpenses([]);
-            setGroupChecklists({});
-            return;
-        }
-
-        // Listener for expenses within those groups
-        const qExpenses = query(collection(db, "expenses"), where("groupId", "in", groupIds));
-        const unsubscribeExpenses = onSnapshot(qExpenses, (expSnapshot) => {
-            const groupExpenses = expSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), date: doc.data().date.toDate().toISOString() } as Expense));
-            setExpenses(groupExpenses.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
-        });
-
-        // Listener for checklists within those groups
-        const qChecklists = query(collection(db, "checklists"), where("groupId", "in", groupIds));
-        const unsubscribeChecklists = onSnapshot(qChecklists, (checklistSnapshot) => {
-            const checklistsData: {[groupId: string]: ChecklistItem[]} = {};
-            checklistSnapshot.docs.forEach(doc => {
-                checklistsData[doc.id] = doc.data().items;
-            });
-            setGroupChecklists(checklistsData);
-        });
-
-        // Cleanup nested listeners when groups change
-        return () => {
-            unsubscribeExpenses();
-            unsubscribeChecklists();
-        }
     });
 
     // Listener for friendships
@@ -183,7 +169,40 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
         unsubscribeGroups();
         unsubscribeFriendships();
     };
-  }, [currentUser?.id]);
+  }, [currentUser?.id, db]);
+  
+    // Effect for expenses based on groups
+    useEffect(() => {
+        if (!db || groups.length === 0) {
+            setExpenses([]);
+            return;
+        }
+        const groupIds = groups.map(g => g.id);
+        const qExpenses = query(collection(db, "expenses"), where("groupId", "in", groupIds));
+        const unsubscribeExpenses = onSnapshot(qExpenses, (expSnapshot) => {
+            const groupExpenses = expSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), date: doc.data().date.toDate().toISOString() } as Expense));
+            setExpenses(groupExpenses.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+        });
+        return () => unsubscribeExpenses();
+    }, [db, groups]);
+
+    // Effect for checklists based on groups
+    useEffect(() => {
+        if (!db || groups.length === 0) {
+            setGroupChecklists({});
+            return;
+        }
+        const groupIds = groups.map(g => g.id);
+        const qChecklists = query(collection(db, "checklists"), where("groupId", "in", groupIds));
+        const unsubscribeChecklists = onSnapshot(qChecklists, (checklistSnapshot) => {
+            const checklistsData: {[groupId: string]: ChecklistItem[]} = {};
+            checklistSnapshot.docs.forEach(doc => {
+                checklistsData[doc.id] = doc.data().items;
+            });
+            setGroupChecklists(checklistsData);
+        });
+        return () => unsubscribeChecklists();
+    }, [db, groups]);
   
   // Memoize chatIds to prevent re-renders unless friendships actually change
   const chatIdsString = useMemo(() => {
@@ -199,13 +218,11 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
   // Decoupled effect for messages
   useEffect(() => {
-      if (!currentUser?.id) {
+      if (!currentUser?.id || !db) {
           setMessages([]);
           return;
       }
       const chatIds = JSON.parse(chatIdsString);
-
-      // Guard against empty array for 'in' query
       if (chatIds.length === 0) {
           setMessages([]);
           return;
@@ -226,26 +243,27 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
           console.error("Message listener error:", error);
       });
   
-      return () => {
-          unsubscribeMessages();
-      };
-  }, [currentUser?.id, chatIdsString]);
+      return () => unsubscribeMessages();
+  }, [currentUser?.id, db, chatIdsString]);
 
 
   const signUp = async (email: string, pass: string) => {
+    if (!auth) throw new Error("Auth not initialized");
     return createUserWithEmailAndPassword(auth, email, pass);
   }
 
   const signIn = (email: string, pass: string) => {
+    if (!auth) throw new Error("Auth not initialized");
     return signInWithEmailAndPassword(auth, email, pass);
   }
   
   const signOut = () => {
+    if (!auth) throw new Error("Auth not initialized");
     return firebaseSignOut(auth);
   }
 
   const sendFriendRequest = async (email: string) => {
-    if (!currentUser) throw new Error("Not authenticated");
+    if (!currentUser || !db) throw new Error("Not authenticated or DB not initialized");
     
     const usersRef = collection(db, 'users');
     const q = query(usersRef, where('email', '==', email));
@@ -278,17 +296,19 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   }
 
   const acceptFriendRequest = async (friendshipId: string) => {
+     if (!db) return;
      const friendshipRef = doc(db, 'friendships', friendshipId);
      await updateDoc(friendshipRef, { status: 'accepted' });
   }
 
   const rejectFriendRequest = async (friendshipId: string) => {
+     if (!db) return;
      const friendshipRef = doc(db, 'friendships', friendshipId);
      await deleteDoc(friendshipRef);
   }
   
    const getChatMessages = (friendId: string, callback: (messages: Message[]) => void) => {
-    if (!currentUser) return () => {};
+    if (!currentUser || !db) return () => {};
 
     const chatId = [currentUser.id, friendId].sort().join('_');
     
@@ -311,7 +331,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   };
 
   const sendMessage = async (receiverId: string, text: string) => {
-    if (!currentUser) throw new Error("Not authenticated");
+    if (!currentUser || !db) throw new Error("Not authenticated or DB not initialized");
     const chatId = [currentUser.id, receiverId].sort().join('_');
     
     await addDoc(collection(db, "messages"), {
@@ -324,6 +344,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   }
   
   const markMessageAsRead = async (messageId: string) => {
+    if (!db) return;
     const messageRef = doc(db, "messages", messageId);
     await updateDoc(messageRef, { read: true });
   }
@@ -345,7 +366,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   };
 
   const addExpense = async (expenseData: AddExpenseData) => {
-     if (!currentUser) throw new Error("No user found");
+     if (!currentUser || !db) throw new Error("No user found or DB not initialized");
     
      await addDoc(collection(db, "expenses"), {
       ...expenseData,
@@ -355,7 +376,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   };
 
   const createGroup = async (name: string, memberEmails: string[]) => {
-      if (!currentUser) throw new Error("Not authenticated");
+      if (!currentUser || !db) throw new Error("Not authenticated or DB not initialized");
       
       const memberIds = new Set<string>([currentUser.id]);
       
@@ -379,6 +400,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   };
 
   const updateGroupMembers = async (groupId: string, memberEmailsToAdd: string[], memberIdsToRemove: string[]) => {
+      if (!db) return;
       const groupRef = doc(db, "groups", groupId);
       const membersToAddIds: string[] = [];
       if (memberEmailsToAdd.length > 0) {
@@ -398,6 +420,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   };
   
   const deleteGroup = async (groupId: string) => {
+    if (!db) return;
     const batch = writeBatch(db);
     // Delete group document
     batch.delete(doc(db, "groups", groupId));
@@ -411,7 +434,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   };
   
   const leaveGroup = async (groupId: string) => {
-     if (!currentUser) throw new Error("Not authenticated");
+     if (!currentUser || !db) throw new Error("Not authenticated or DB not initialized");
      const groupRef = doc(db, "groups", groupId);
      await updateDoc(groupRef, {
         members: arrayRemove(currentUser.id)
@@ -419,12 +442,13 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   };
   
   const updateGroupChecklist = async (groupId: string, items: ChecklistItem[]) => {
+    if (!db) return;
     const checklistRef = doc(db, "checklists", groupId);
     await setDoc(checklistRef, { groupId, items }, { merge: true });
   };
   
   const settleFriendDebt = async (friendId: string) => {
-    if (!currentUser) throw new Error("Not authenticated");
+    if (!currentUser || !db) throw new Error("Not authenticated or DB not initialized");
     const q = query(collection(db, "expenses"), where('splitWith', 'array-contains', currentUser.id));
     const snapshot = await getDocs(q);
     const batch = writeBatch(db);
@@ -439,6 +463,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   }
   
   const settleAllInGroup = async (groupId: string) => {
+    if (!db) return;
     const q = query(collection(db, "expenses"), where("groupId", "==", groupId));
     const snapshot = await getDocs(q);
     const batch = writeBatch(db);
@@ -570,7 +595,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
   const value = {
     currentUser,
-    isAuthLoading: isAuthLoading,
+    isAuthLoading,
     users,
     groups,
     expenses,
