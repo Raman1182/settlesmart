@@ -1,3 +1,4 @@
+
 "use client"
 
 import * as React from "react"
@@ -77,10 +78,11 @@ export function SpendingByCategoryChart() {
     );
 
     const spendingByCategory = expenses.reduce((acc, expense) => {
-        if (!acc[expense.category]) {
-            acc[expense.category] = 0;
+        const category = expense.category || 'Other';
+        if (!acc[category]) {
+            acc[category] = 0;
         }
-        acc[expense.category] += expense.amount;
+        acc[category] += expense.amount;
         return acc;
     }, {} as Record<string, number>);
 
@@ -104,7 +106,7 @@ export function SpendingByCategoryChart() {
                 <CardTitle>Spending by Category</CardTitle>
                 <CardDescription>Hover over a segment to see details.</CardDescription>
             </CardHeader>
-            <CardContent className="flex-1 pb-0">
+            <CardContent className="flex-1 pb-0 flex items-center justify-center">
                 {chartData.length > 0 ? (
                     <ChartContainer
                         config={chartConfig}
@@ -129,8 +131,8 @@ export function SpendingByCategoryChart() {
                         </PieChart>
                     </ChartContainer>
                 ) : (
-                     <div className="flex h-full items-center justify-center">
-                        <p className="text-muted-foreground">No spending data available.</p>
+                     <div className="flex h-full items-center justify-center text-center text-muted-foreground p-8">
+                        <p>No spending data available. Add an expense to see your category breakdown.</p>
                     </div>
                 )}
             </CardContent>

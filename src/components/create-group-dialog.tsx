@@ -88,9 +88,9 @@ export function CreateGroupDialog() {
         setIsOpen(open);
     }}>
       <DialogTrigger asChild>
-        <Button variant="ghost" className="justify-start w-full px-3">
-          <PlusCircle className="h-4 w-4 mr-2" />
-          Create Group
+        <Button size="icon" variant="ghost" className="h-7 w-7">
+            <PlusCircle className="h-4 w-4" />
+            <span className="sr-only">Create Group</span>
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[425px]">
@@ -141,7 +141,7 @@ export function CreateGroupDialog() {
           </div>
            {memberEmails.length > 0 && (
             <div className="grid grid-cols-4 items-start gap-4">
-                <div className="text-right text-sm font-medium col-start-1">Invited</div>
+                <div className="text-right text-sm font-medium col-start-1 mt-2">Invited</div>
                 <div className="col-span-3 flex flex-wrap gap-2">
                     {memberEmails.map(email => (
                         <Badge key={email} variant="secondary" className="flex items-center gap-1">
