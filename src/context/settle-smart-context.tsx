@@ -100,25 +100,12 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
             }
         } else {
             setCurrentUser(null);
-            setUsers([]);
-            setGroups([]);
-            setExpenses([]);
-            setGroupChecklists({});
-            setMessages([]);
-            setFriendships([]);
         }
         setIsLoading(false);
     });
 
-    // Listener for all users
-    const unsubscribeUsers = onSnapshot(collection(db, "users"), (snapshot) => {
-        const allUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
-        setUsers(allUsers);
-    });
-
     return () => {
         unsubscribeAuth();
-        unsubscribeUsers();
     };
   }, []);
 
@@ -174,36 +161,40 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
             userFriendships.push({ id: doc.id, ...doc.data()} as Friendship);
         });
         setFriendships(userFriendships);
+        
+        const acceptedFriendships = userFriendships.filter(f => f.status === 'accepted');
+        const chatIds = acceptedFriendships.map(f => [f.userIds[0], f.userIds[1]].sort().join('_'));
+
+        if (chatIds.length > 0) {
+            const qMessages = query(collection(db, "messages"), where("chatId", "in", chatIds), orderBy("createdAt"));
+            const unsubscribeMessages = onSnapshot(qMessages, (msgSnapshot) => {
+                const receivedMessages: Message[] = msgSnapshot.docs.map(doc => {
+                    const data = doc.data();
+                    return {
+                        id: doc.id,
+                        ...data,
+                        createdAt: data.createdAt?.toDate().toISOString() || new Date().toISOString()
+                    } as Message
+                });
+                setMessages(receivedMessages);
+            });
+            return () => unsubscribeMessages();
+        } else {
+            setMessages([]);
+        }
     });
 
-    const chatIds = friendships
-      .filter(f => f.status === 'accepted')
-      .map(f => [f.userIds[0], f.userIds[1]].sort().join('_'));
-
-    let unsubscribeMessages = () => {};
-    if (chatIds.length > 0) {
-        const qMessages = query(collection(db, "messages"), where("chatId", "in", chatIds), orderBy("createdAt"));
-        unsubscribeMessages = onSnapshot(qMessages, (msgSnapshot) => {
-            const receivedMessages: Message[] = msgSnapshot.docs.map(doc => {
-                const data = doc.data();
-                return {
-                    id: doc.id,
-                    ...data,
-                    createdAt: data.createdAt?.toDate().toISOString() || new Date().toISOString()
-                } as Message
-            });
-            setMessages(receivedMessages);
-        });
-    } else {
-        setMessages([]);
-    }
+    const unsubscribeUsers = onSnapshot(collection(db, "users"), (snapshot) => {
+        const allUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
+        setUsers(allUsers);
+    });
     
     return () => {
         if (unsubscribeGroups) unsubscribeGroups();
         if (unsubscribeFriendships) unsubscribeFriendships();
-        if (unsubscribeMessages) unsubscribeMessages();
+        if (unsubscribeUsers) unsubscribeUsers();
     };
-  }, [currentUser?.id, friendships]);
+  }, [currentUser?.id]);
 
 
   const signUp = async (email: string, pass: string) => {
