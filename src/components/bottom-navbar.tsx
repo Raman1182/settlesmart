@@ -20,7 +20,7 @@ export function BottomNavbar() {
   ];
 
   return (
-    <div className="md:hidden fixed bottom-0 left-0 z-50 w-full h-20 bg-background/80 backdrop-blur-sm border-t border-white/10">
+    <div className="md:hidden fixed bottom-0 left-0 z-50 w-full h-20 bg-background/80 backdrop-blur-sm border-t border-border/50">
       <div className="grid h-full max-w-lg grid-cols-5 mx-auto font-medium">
         {navItems.map((item) => {
             if (item.isAction) {

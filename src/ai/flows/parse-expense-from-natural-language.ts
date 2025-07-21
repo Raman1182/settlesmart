@@ -36,7 +36,10 @@ const prompt = ai.definePrompt({
   output: {schema: ParseExpenseOutputSchema},
   prompt: `You are an AI assistant that extracts expense information from natural language input.
 
-  Given the following input, extract the amount, participants, and description of the expense.
+  Given the following input, extract the amount, participants, and description of the expense. The current year is ${new Date().getFullYear()}.
+
+  Example: "$50 for pizza with Alex and Ben" -> { amount: 50, participants: ["Alex", "Ben"], description: "Pizza" }
+  Example: "I paid 1200 for last night's movie tickets for me, Chloe, and David" -> { amount: 1200, participants: ["you", "Chloe", "David"], description: "Movie tickets" }
 
   Input: {{{naturalLanguageInput}}}
 

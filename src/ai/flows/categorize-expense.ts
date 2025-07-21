@@ -29,7 +29,7 @@ const prompt = ai.definePrompt({
   name: 'categorizeExpensePrompt',
   input: {schema: CategorizeExpenseInputSchema},
   output: {schema: CategorizeExpenseOutputSchema},
-  prompt: `You are an expert financial advisor.  You will categorize the expense provided by the user into one of these categories: Food & Drink, Travel, Entertainment, Utilities, Rent, Groceries, Shopping, or Other.
+  prompt: `You are an expert financial advisor. You will categorize the expense provided by the user into one of these categories: Food & Drink, Travel, Entertainment, Utilities, Rent, Groceries, Shopping, or Other.
 
 Description: {{{description}}}`,
 });

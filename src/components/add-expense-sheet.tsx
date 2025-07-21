@@ -11,7 +11,6 @@ import {
   SheetTitle,
   SheetFooter,
   SheetClose,
-  SheetTrigger,
 } from "@/components/ui/sheet";
 import {
   Form,
@@ -49,7 +48,7 @@ const expenseFormSchema = z.object({
   groupId: z.string().nonempty({ message: "Please select a group." }),
 });
 
-export function AddExpenseSheet() {
+export function AddExpenseSheet({ children }: { children?: React.ReactNode }) {
   const [isOpen, setIsOpen] = useState(false);
   const [nlInput, setNlInput] = useState("");
   const [isParsing, startParsingTransition] = useTransition();
@@ -69,10 +68,10 @@ export function AddExpenseSheet() {
   });
   
   useEffect(() => {
-    if (currentUser) {
+    if (currentUser && isOpen) {
       form.setValue('paidById', currentUser.id);
     }
-  }, [currentUser, form]);
+  }, [currentUser, isOpen, form]);
 
   const handleParse = () => {
     if (!nlInput) return;
@@ -83,9 +82,10 @@ export function AddExpenseSheet() {
           form.setValue("description", result.description);
           form.setValue("amount", result.amount);
           
-          const participantIds = result.participants
-            .map(name => users.find(u => u.name.toLowerCase() === name.toLowerCase())?.id)
-            .filter((id): id is string => !!id);
+          const participantNames = result.participants.map(p => p.toLowerCase());
+          const participantIds = users
+            .filter(u => participantNames.includes(u.name.toLowerCase()) || (u.id === currentUser.id && participantNames.includes('you')))
+            .map(u => u.id);
           
           if(currentUser && !participantIds.includes(currentUser.id)) {
             participantIds.push(currentUser.id);
@@ -141,29 +141,38 @@ export function AddExpenseSheet() {
   const selectedGroupId = form.watch("groupId");
   const membersOfSelectedGroup = groups.find(g => g.id === selectedGroupId)?.members.map(id => findUserById(id)).filter(Boolean) as User[];
 
+  const resetForm = () => {
+      form.reset({
+        description: "",
+        amount: 0,
+        paidById: currentUser?.id || "",
+        splitWith: [],
+        groupId: "",
+      });
+      setNlInput("");
+  }
+
 
   return (
-    <Sheet open={isOpen} onOpenChange={setIsOpen}>
-      <SheetTrigger asChild>
-        <Button className="w-full">
-          <Plus className="h-4 w-4 mr-2" />
-          Add Expense
-        </Button>
-      </SheetTrigger>
-      <SheetContent className="flex flex-col gap-0 p-0 sm:max-w-lg bg-black">
+    <Sheet open={isOpen} onOpenChange={(open) => {
+        if(!open) resetForm();
+        setIsOpen(open);
+    }}>
+      {children}
+      <SheetContent className="flex flex-col gap-0 p-0 sm:max-w-lg bg-background/90 backdrop-blur-sm">
         <SheetHeader className="p-6">
           <SheetTitle>Log a New Expense</SheetTitle>
           <SheetDescription>
             Describe your expense in plain English for our AI to parse, or fill out the form manually.
           </SheetDescription>
         </SheetHeader>
-        <div className="p-6 border-y border-white/10 bg-card/50">
+        <div className="p-6 border-y border-border/50 bg-card/50">
             <Textarea
                 placeholder="e.g., $25 for pizza with Alice and Bob for the apartment"
                 value={nlInput}
                 onChange={(e) => setNlInput(e.target.value)}
                 rows={3}
-                className="bg-background"
+                className="bg-background text-base"
             />
             <Button onClick={handleParse} disabled={isParsing || !nlInput} className="w-full mt-4">
                 {isParsing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
@@ -233,7 +242,7 @@ export function AddExpenseSheet() {
                 )}
               />
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4">
                 <FormField
                   control={form.control}
                   name="paidById"
@@ -242,7 +251,7 @@ export function AddExpenseSheet() {
                       <FormLabel>Paid by</FormLabel>
                        <Select onValueChange={field.onChange} value={field.value} defaultValue={field.value}>
                         <FormControl>
-                          <SelectTrigger>
+                          <SelectTrigger disabled={!selectedGroupId}>
                             <SelectValue placeholder="Select who paid" />
                           </SelectTrigger>
                         </FormControl>
@@ -254,7 +263,7 @@ export function AddExpenseSheet() {
                                   <AvatarImage src={user.avatar} alt={user.name} />
                                   <AvatarFallback>{user.initials}</AvatarFallback>
                                 </Avatar>
-                                <span>{user.name}</span>
+                                <span>{user.name} {user.id === currentUser?.id ? "(You)" : ""}</span>
                               </div>
                             </SelectItem>
                           ))}
@@ -286,7 +295,7 @@ export function AddExpenseSheet() {
                                 return (
                                 <FormItem
                                     key={item.id}
-                                    className="flex flex-row items-center space-x-3 space-y-0"
+                                    className="flex flex-row items-center space-x-3 space-y-0 p-2 rounded-md transition-colors hover:bg-muted/50"
                                 >
                                     <FormControl>
                                     <Checkbox
@@ -302,7 +311,7 @@ export function AddExpenseSheet() {
                                         }}
                                     />
                                     </FormControl>
-                                    <FormLabel className="font-normal flex items-center gap-2">
+                                    <FormLabel className="font-normal flex items-center gap-2 cursor-pointer w-full">
                                          <Avatar className="h-8 w-8">
                                             <AvatarImage src={item.avatar} alt={item.name} />
                                             <AvatarFallback>{item.initials}</AvatarFallback>
@@ -322,7 +331,7 @@ export function AddExpenseSheet() {
              )}
             </div>
 
-            <SheetFooter className="p-6 bg-card/40 border-t border-white/10 mt-auto">
+            <SheetFooter className="p-6 bg-card/80 border-t border-border/50 mt-auto">
               <SheetClose asChild>
                 <Button variant="outline">Cancel</Button>
               </SheetClose>
