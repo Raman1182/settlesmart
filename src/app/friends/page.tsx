@@ -12,6 +12,7 @@ import { ArrowLeftRight, Loader2 } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import type { User } from "@/lib/types";
 import { useToast } from "@/components/ui/use-toast";
+import { TrustScoreIndicator } from "@/components/trust-score-indicator";
 
 interface FriendWithBalance {
     id: string;
@@ -106,6 +107,14 @@ export default function FriendsPage() {
     });
   }
 
+  const getTrustScore = (balance: number) => {
+    if (balance > 100) return 30; // They owe you a lot
+    if (balance > 0) return 50; // They owe you
+    if (balance < -100) return 95; // You owe them a lot
+    if (balance < 0) return 80; // You owe them
+    return 70; // Settled up, but not as high as when you owe them (since that means they trusted you)
+  };
+
   return (
     <AlertDialog>
       <div className="flex flex-col min-h-screen w-full">
@@ -131,6 +140,7 @@ export default function FriendsPage() {
                    <div className="text-sm text-muted-foreground">
                       {friend.balance > 0 ? `owes you` : friend.balance < 0 ? `you owe` : 'Settled up'}
                    </div>
+                   <TrustScoreIndicator score={getTrustScore(friend.balance)} />
                 </CardContent>
                 <CardFooter className="flex flex-col gap-2">
                    <AlertDialogTrigger asChild>

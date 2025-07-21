@@ -11,6 +11,7 @@ import { Progress } from "@/components/ui/progress";
 import { useSettleSmart } from "@/context/settle-smart-context";
 import { formatCurrency } from "@/lib/utils";
 import { Loader2, Users, ShoppingCart, Target } from "lucide-react";
+import { BudgetGoals } from "@/components/budget-goals";
 
 
 export default function InsightsPage() {
@@ -30,17 +31,7 @@ export default function InsightsPage() {
             <main className="flex flex-1 flex-col gap-4 p-4 sm:p-6 md:gap-8 md:p-8 overflow-y-auto">
                  <div className="grid gap-4 md:gap-8 lg:grid-cols-2">
                     <SpendingByCategoryChart />
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Frequent Contacts</CardTitle>
-                            <CardDescription>The people you transact with most often.</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                             <div className="flex h-full min-h-[250px] items-center justify-center text-center text-muted-foreground">
-                                <p>Coming soon!</p>
-                            </div>
-                        </CardContent>
-                    </Card>
+                    <BudgetGoals />
                  </div>
                  <SpendingOverTimeChart />
             </main>
