@@ -27,6 +27,7 @@ export default function GroupDetailsPage() {
   const { groups, findUserById, currentUser, isLoading: isAuthLoading, getGroupBalances, deleteGroup, leaveGroup, simplifyGroupDebts, settleAllInGroup } = useSettleSmart();
   const { toast } = useToast();
   const [isDeleting, startDeleteTransition] = useTransition();
+  const [isLeaving, startLeaveTransition] = useTransition();
 
   const group = useMemo(() => groups.find(g => g.id === groupId), [groups, groupId]);
 
@@ -51,6 +52,19 @@ export default function GroupDetailsPage() {
         toast({ variant: "destructive", title: "Error", description: error.message });
       }
     });
+  }
+
+  const handleLeaveGroup = () => {
+    if (!group) return;
+    startLeaveTransition(async () => {
+        try {
+            await leaveGroup(group.id);
+            toast({ title: "You've left the group", description: `You are no longer a member of "${group.name}".`});
+            router.push('/groups');
+        } catch (error: any) {
+            toast({ variant: "destructive", title: "Error leaving group", description: error.message });
+        }
+    })
   }
 
   const handleSettleAll = () => {
@@ -128,10 +142,29 @@ export default function GroupDetailsPage() {
                              <DropdownMenuSeparator />
                             </>
                         )}
-                        <DropdownMenuItem disabled>
-                            <LogOut className="mr-2 h-4 w-4" />
-                            <span>Leave Group</span>
-                        </DropdownMenuItem>
+                        <AlertDialog>
+                             <AlertDialogTrigger asChild>
+                                <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+                                    <LogOut className="mr-2 h-4 w-4" />
+                                    <span>Leave Group</span>
+                                </DropdownMenuItem>
+                             </AlertDialogTrigger>
+                             <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                        <AlertDialogTitle>Leave "{group.name}"?</AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                            You will no longer be a member of this group. You can only rejoin if the owner invites you back.
+                                        </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                        <AlertDialogAction onClick={handleLeaveGroup}>
+                                            {isLeaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                            Yes, leave group
+                                        </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                </AlertDialogContent>
+                        </AlertDialog>
                     </DropdownMenuContent>
                   </DropdownMenu>
               </div>

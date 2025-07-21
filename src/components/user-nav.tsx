@@ -17,11 +17,35 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useSettleSmart } from "@/context/settle-smart-context";
-import { Settings, User as UserIcon } from "lucide-react";
+import { Settings, User as UserIcon, Award, TrendingDown, TrendingUp } from "lucide-react";
 import Link from "next/link";
+import { Badge } from "./ui/badge";
+import { useMemo } from "react";
 
 export function UserNav() {
-  const { currentUser } = useSettleSmart();
+  const { currentUser, expenses, balances } = useSettleSmart();
+
+  const userBadge = useMemo(() => {
+    if (!currentUser) return null;
+
+    const totalPaid = expenses
+        .filter(e => e.paidById === currentUser.id)
+        .reduce((acc, e) => acc + e.amount, 0);
+
+    if (totalPaid > 20000) {
+        return { name: "Big Spender", icon: <Award className="h-3 w-3" /> };
+    }
+
+    if (balances.totalOwedToUser > balances.totalOwedByUser && balances.totalOwedToUser > 100) {
+        return { name: "Early Bird", icon: <TrendingUp className="h-3 w-3" /> };
+    }
+
+    if (balances.totalOwedByUser > balances.totalOwedToUser && balances.totalOwedByUser > 1000) {
+        return { name: "Always Owes", icon: <TrendingDown className="h-3 w-3" /> };
+    }
+    
+    return null;
+  }, [currentUser, expenses, balances]);
 
   if (!currentUser) {
     return null;
@@ -48,6 +72,14 @@ export function UserNav() {
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
+          {userBadge && (
+             <DropdownMenuItem disabled>
+                <div className="flex items-center gap-2">
+                    {userBadge.icon}
+                    <span>{userBadge.name}</span>
+                </div>
+            </DropdownMenuItem>
+          )}
           <DropdownMenuItem disabled>
             <UserIcon className="mr-2 h-4 w-4" />
             <span>Profile</span>
