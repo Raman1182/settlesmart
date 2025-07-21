@@ -133,7 +133,7 @@ export default function FriendsPage() {
               <TabsList className="grid w-full grid-cols-3">
                 <TabsTrigger value="friends">Friends</TabsTrigger>
                 <TabsTrigger value="requests">
-                  Requests {friendRequests.length > 0 && <span className="ml-2 bg-primary text-primary-foreground h-5 w-5 text-xs rounded-full flex items-center justify-center">{friendRequests.length}</span>}
+                  Requests {friendRequests.length > 0 && <span className="ml-2 bg-primary text-primary-foreground h-5 w-5 text-xs rounded-full flex items-center justify-center">{friendRequests.length > 9 ? '9+' : friendRequests.length}</span>}
                 </TabsTrigger>
                 <TabsTrigger value="discover">Discover</TabsTrigger>
               </TabsList>
@@ -161,7 +161,7 @@ export default function FriendsPage() {
                               <Button variant="ghost" size="icon" onClick={() => router.push(`/chat/${friend.id}`)} disabled={isProcessing} className="relative">
                                 <MessageSquare className="h-4 w-4" />
                                 {unreadCount > 0 && (
-                                    <Badge variant="destructive" className="absolute -top-1 -right-1 h-5 w-5 p-0 flex items-center justify-center text-xs">{unreadCount}</Badge>
+                                    <Badge variant="destructive" className="absolute -top-1 -right-1 h-5 w-5 p-0 flex items-center justify-center text-xs">{unreadCount > 9 ? '9+' : unreadCount}</Badge>
                                 )}
                               </Button>
                               <Button variant="ghost" size="icon" onClick={() => handleRemoveFriend(friend.id)} disabled={isProcessing}>

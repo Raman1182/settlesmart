@@ -3,7 +3,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Users, Plus, MessageSquare, Bell } from "lucide-react";
+import { Home, Users, Plus, MessageSquare, Bell, UserPlus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AddExpenseSheet } from "./add-expense-sheet";
 import { Button } from "./ui/button";
@@ -31,7 +31,7 @@ export function BottomNavbar() {
     { href: "/groups", label: "Groups", icon: Users },
     { href: "#", label: "Add", icon: Plus, isAction: true },
     { href: "/chats", label: "Chats", icon: MessageSquare, notificationCount: totalUnreadCount },
-    { href: "/friends", label: "Friends", icon: Bell, notificationCount: friendRequestCount },
+    { href: "/friends", label: "Friends", icon: UserPlus, notificationCount: friendRequestCount },
   ];
   
     if (pathname.startsWith('/login')) {
@@ -68,7 +68,7 @@ export function BottomNavbar() {
                 <span className="text-xs">{item.label}</span>
                  {item.notificationCount && item.notificationCount > 0 && (
                     <Badge variant="destructive" className="absolute top-2 right-4 h-5 w-5 p-0 flex items-center justify-center text-xs">
-                        {item.notificationCount}
+                        {item.notificationCount > 9 ? '9+' : item.notificationCount}
                     </Badge>
                 )}
             </Link>

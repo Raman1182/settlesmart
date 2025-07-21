@@ -75,7 +75,7 @@ export default function ChatsPage() {
                                                 <span>{formatDistanceToNow(new Date(chat.lastMessage.timestamp), { addSuffix: true })}</span>
                                              )}
                                              {unreadCount > 0 && (
-                                                <Badge variant="destructive" className="h-5 w-5 flex items-center justify-center">{unreadCount}</Badge>
+                                                <Badge variant="destructive" className="h-5 w-5 flex items-center justify-center">{unreadCount > 9 ? '9+' : unreadCount}</Badge>
                                              )}
                                         </div>
                                     </div>
