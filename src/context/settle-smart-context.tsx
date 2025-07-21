@@ -56,6 +56,7 @@ interface SettleSmartContextType {
   signOut: () => Promise<void>;
   sendMessage: (receiverId: string, text: string) => Promise<void>;
   markMessageAsRead: (messageId: string) => Promise<void>;
+  addAdHocUser: (email: string) => void;
 }
 
 const SettleSmartContext = createContext<SettleSmartContextType | undefined>(undefined);
@@ -82,9 +83,13 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
         if (user) {
-            const existingUser = appDataStore.users.find(u => u.email === user.email);
+            let existingUser = appDataStore.users.find(u => u.id === user.uid || u.email === user.email);
             if (existingUser) {
-              setCurrentUser({ ...existingUser, id: user.uid });
+              // Ensure user has firebase uid
+              if (existingUser.id !== user.uid) {
+                existingUser.id = user.uid;
+              }
+              setCurrentUser(existingUser);
             } else {
               const newUser: User = {
                 id: user.uid,
@@ -94,9 +99,10 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
                 initials: user.email!.charAt(0).toUpperCase(),
               };
               appDataStore.users.push(newUser);
-              setUsers(appDataStore.users);
               setCurrentUser(newUser);
             }
+            // Always refresh users from the "global" store on auth change
+            setUsers([...appDataStore.users]);
         } else {
             setCurrentUser(null);
         }
@@ -130,12 +136,19 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   }, [currentUser]);
 
 
-  const signUp = (email: string, pass: string) => {
-    return createUserWithEmailAndPassword(auth, email, pass);
+  const signUp = async (email: string, pass: string) => {
+    const result = await createUserWithEmailAndPassword(auth, email, pass);
+    // After signup, a new user is created in Firebase Auth.
+    // The onAuthStateChanged listener will fire, creating the user in our mock store.
+    // We explicitly set the user list state again here to ensure all components re-render with the new user.
+    setUsers([...appDataStore.users]); 
+    return result;
   }
+
   const signIn = (email: string, pass: string) => {
     return signInWithEmailAndPassword(auth, email, pass);
   }
+  
   const signOut = () => {
     return firebaseSignOut(auth);
   }
@@ -156,7 +169,6 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     await updateDoc(messageRef, { read: true });
   }
 
-
   const findUserById = useCallback((id: string) => users.find(u => u.id === id), [users]);
 
   const addExpense = (expenseData: AddExpenseData) => {
@@ -171,12 +183,27 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     setExpenses(appDataStore.expenses.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
   };
   
+  const addAdHocUser = (email: string) => {
+    if (appDataStore.users.some(u => u.email === email)) {
+        throw new Error("User with this email already exists.");
+    }
+    const newUser: User = {
+        id: `user-${new Date().getTime()}-${Math.random()}`,
+        name: email.split('@')[0],
+        email: email,
+        avatar: `https://placehold.co/100x100?text=${email.charAt(0).toUpperCase()}`,
+        initials: email.charAt(0).toUpperCase(),
+    };
+    appDataStore.users.push(newUser);
+    setUsers([...appDataStore.users]);
+  }
+
   const createGroup = async (name: string, memberEmails: string[]) => {
       if (!currentUser) throw new Error("Not authenticated");
       const memberIds = new Set<string>([currentUser.id]);
       
       memberEmails.forEach(email => {
-        const user = users.find(u => u.email === email);
+        let user = appDataStore.users.find(u => u.email === email);
         if (user) {
           memberIds.add(user.id);
         } else {
@@ -190,7 +217,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
             initials: email.charAt(0).toUpperCase(),
           };
           appDataStore.users.push(newUser);
-          setUsers(appDataStore.users);
+          setUsers([...appDataStore.users]);
           memberIds.add(newId);
         }
       });
@@ -400,7 +427,8 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     signIn,
     signOut,
     sendMessage,
-    markMessageAsRead
+    markMessageAsRead,
+    addAdHocUser,
   };
 
   return (

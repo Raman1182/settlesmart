@@ -1,14 +1,14 @@
 
 "use client";
 
-import { useMemo, useState, useTransition, useEffect } from "react";
+import { useMemo, useState, useTransition, useEffect, useCallback } from "react";
 import { Header } from "@/components/header";
 import { useSettleSmart } from "@/context/settle-smart-context";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/utils";
-import { ArrowLeftRight, Loader2, MessageSquare, MoreVertical, ShieldCheck, Send } from "lucide-react";
+import { ArrowLeftRight, Loader2, MessageSquare, MoreVertical, ShieldCheck, Send, Plus, UserPlus } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import type { User } from "@/lib/types";
 import { useToast } from "@/components/ui/use-toast";
@@ -16,6 +16,9 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { TrustScoreIndicator } from "@/components/trust-score-indicator";
 import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+
 
 interface FriendWithBalance {
     id: string;
@@ -29,13 +32,15 @@ interface FriendWithBalance {
 
 
 export default function FriendsPage() {
-  const { users, currentUser, balances, settleFriendDebt, sendMessage, isLoading } = useSettleSmart();
+  const { users, currentUser, balances, settleFriendDebt, sendMessage, isLoading, addAdHocUser } = useSettleSmart();
   const { toast } = useToast();
   const [settleFriend, setSettleFriend] = useState<FriendWithBalance | null>(null);
   const [messageFriend, setMessageFriend] = useState<FriendWithBalance | null>(null);
   const [messageText, setMessageText] = useState("");
   const [isSendingMessage, startSendingMessageTransition] = useTransition();
   const [isSettling, startSettleTransition] = useTransition();
+  const [isAddFriendOpen, setIsAddFriendOpen] = useState(false);
+  const [newFriendEmail, setNewFriendEmail] = useState("");
   const router = useRouter();
   
   useEffect(() => {
@@ -47,8 +52,8 @@ export default function FriendsPage() {
   const friendsWithBalances = useMemo(() => {
     if (!currentUser) return [];
     
+    // Create a map of all known users except the current one.
     const friendMap: Map<string, FriendWithBalance> = new Map();
-
     users.forEach(u => {
         if (u.id !== currentUser.id) {
             friendMap.set(u.id, {
@@ -62,37 +67,31 @@ export default function FriendsPage() {
             });
         }
     });
-    
+
+    // Calculate balances from settlements
     balances.settlements.forEach(s => {
-      let friend: FriendWithBalance | undefined;
       let friendId: string | undefined;
 
-      if (s.from.id === currentUser.id) {
-        friendId = s.to.id;
-      } else if (s.to.id === currentUser.id) {
-        friendId = s.from.id;
-      }
+      if (s.from.id === currentUser.id) friendId = s.to.id;
+      else if (s.to.id === currentUser.id) friendId = s.from.id;
 
-      if (friendId) {
-        friend = friendMap.get(friendId);
-
+      if (friendId && friendId !== currentUser.id) {
+        let friend = friendMap.get(friendId);
         if (!friend) {
+            // Handle cases where a settlement involves someone not in the users list yet (ad-hoc)
             const participant = s.from.id === friendId ? s.from : s.to;
             friend = {
                 id: participant.id,
                 name: participant.name,
                 initials: participant.name.charAt(0).toUpperCase(),
                 balance: 0,
-                isRegistered: !!(participant as User).email,
+                isRegistered: false, // Ad-hoc users are not registered
             };
             friendMap.set(friendId, friend);
         }
-
-        if (s.from.id === currentUser.id) {
-          friend.balance -= s.amount; 
-        } else {
-          friend.balance += s.amount; 
-        }
+        
+        if (s.from.id === currentUser.id) friend.balance -= s.amount;
+        else friend.balance += s.amount;
       }
     });
     
@@ -148,13 +147,8 @@ export default function FriendsPage() {
   const getFriendTrustScore = (balance: number) => {
     let score = 50; 
     
-    if (balance > 0) {
-      score -= Math.min(40, Math.log(balance + 1) * 5);
-    }
-    
-    if (balance < 0) {
-      score += Math.min(30, Math.log(Math.abs(balance) + 1) * 3);
-    }
+    if (balance > 0) score -= Math.min(40, Math.log(balance + 1) * 5);
+    if (balance < 0) score += Math.min(30, Math.log(Math.abs(balance) + 1) * 3);
 
     return Math.max(0, Math.min(100, score));
   }
@@ -168,6 +162,21 @@ export default function FriendsPage() {
       })
   }
   
+  const handleAddFriend = () => {
+    if (!newFriendEmail.trim()) {
+        toast({ variant: "destructive", title: "Email is required" });
+        return;
+    }
+    try {
+        addAdHocUser(newFriendEmail);
+        toast({ title: "Friend Added", description: `You can now add ${newFriendEmail} to expenses and groups.` });
+        setIsAddFriendOpen(false);
+        setNewFriendEmail("");
+    } catch (error: any) {
+        toast({ variant: "destructive", title: "Could not add friend", description: error.message });
+    }
+  };
+  
   if (isLoading || !currentUser) {
     return (
        <div className="flex items-center justify-center min-h-screen bg-background">
@@ -177,20 +186,50 @@ export default function FriendsPage() {
   }
 
   return (
-    <AlertDialog onOpenChange={(open) => {
-        if (!open) {
-            setSettleFriend(null);
-            setMessageFriend(null);
-            setMessageText("");
-        }
-    }}>
+    <>
       <div className="flex flex-col min-h-screen w-full">
         <Header pageTitle="Friends" />
         <main className="flex-1 p-4 sm:p-6 md:p-8">
             <Card>
-                <CardHeader>
-                    <CardTitle>Your Contacts</CardTitle>
-                    <CardDescription>A list of all people you've interacted with.</CardDescription>
+                <CardHeader className="flex flex-row items-center justify-between">
+                    <div>
+                        <CardTitle>Your Contacts</CardTitle>
+                        <CardDescription>A list of all people you've interacted with.</CardDescription>
+                    </div>
+                     <Dialog open={isAddFriendOpen} onOpenChange={setIsAddFriendOpen}>
+                        <Button onClick={() => setIsAddFriendOpen(true)}>
+                            <UserPlus className="mr-2 h-4 w-4" />
+                            Add Friend
+                        </Button>
+                        <DialogContent>
+                            <DialogHeader>
+                                <DialogTitle>Add a Friend</DialogTitle>
+                                <DialogDescription>
+                                    Add a new contact by their email address. If they have an account, you'll be able to message them.
+                                </DialogDescription>
+                            </DialogHeader>
+                            <div className="space-y-2 py-4">
+                                <Label htmlFor="email">Friend's Email</Label>
+                                <Input
+                                    id="email"
+                                    type="email"
+                                    placeholder="friend@example.com"
+                                    value={newFriendEmail}
+                                    onChange={(e) => setNewFriendEmail(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                            e.preventDefault();
+                                            handleAddFriend();
+                                        }
+                                    }}
+                                />
+                            </div>
+                            <DialogFooter>
+                                <DialogClose asChild><Button variant="outline">Cancel</Button></DialogClose>
+                                <Button onClick={handleAddFriend}>Add</Button>
+                            </DialogFooter>
+                        </DialogContent>
+                    </Dialog>
                 </CardHeader>
                 <CardContent>
                     <div className="space-y-4">
@@ -209,37 +248,95 @@ export default function FriendsPage() {
                              <div className="w-24">
                                 <TrustScoreIndicator score={getFriendTrustScore(friend.balance)} />
                              </div>
-                            <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                    <Button variant="ghost" size="icon">
-                                        <MoreVertical className="h-4 w-4" />
-                                    </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                     <AlertDialogTrigger asChild>
-                                        <DropdownMenuItem disabled={Math.abs(friend.balance) < 0.01} onSelect={() => setSettleFriend(friend)}>
-                                            <ArrowLeftRight className="mr-2 h-4 w-4" />
-                                            Settle Up
+                             <AlertDialog onOpenChange={(open) => {
+                                if (!open) {
+                                    setSettleFriend(null);
+                                    setMessageFriend(null);
+                                    setMessageText("");
+                                }
+                             }}>
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <Button variant="ghost" size="icon">
+                                            <MoreVertical className="h-4 w-4" />
+                                        </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end">
+                                        <AlertDialogTrigger asChild>
+                                            <DropdownMenuItem disabled={Math.abs(friend.balance) < 0.01} onSelect={() => setSettleFriend(friend)}>
+                                                <ArrowLeftRight className="mr-2 h-4 w-4" />
+                                                Settle Up
+                                            </DropdownMenuItem>
+                                        </AlertDialogTrigger>
+                                        <AlertDialogTrigger asChild>
+                                            <DropdownMenuItem disabled={!friend.isRegistered} onSelect={() => setMessageFriend(friend)}>
+                                                <MessageSquare className="mr-2 h-4 w-4" />
+                                                Message
+                                            </DropdownMenuItem>
+                                        </AlertDialogTrigger>
+                                        <DropdownMenuItem onClick={() => handleShowTrustScore(friend)}>
+                                            <ShieldCheck className="mr-2 h-4 w-4" />
+                                            View Trust Score
                                         </DropdownMenuItem>
-                                    </AlertDialogTrigger>
-                                     <AlertDialogTrigger asChild>
-                                        <DropdownMenuItem disabled={!friend.isRegistered} onSelect={() => setMessageFriend(friend)}>
-                                            <MessageSquare className="mr-2 h-4 w-4" />
-                                            Message
-                                        </DropdownMenuItem>
-                                     </AlertDialogTrigger>
-                                     <DropdownMenuItem onClick={() => handleShowTrustScore(friend)}>
-                                        <ShieldCheck className="mr-2 h-4 w-4" />
-                                        View Trust Score
-                                    </DropdownMenuItem>
-                                </DropdownMenuContent>
-                            </DropdownMenu>
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+                                <AlertDialogContent>
+                                    {settleFriend ? (
+                                        <>
+                                            <AlertDialogHeader>
+                                                <AlertDialogTitle>Settle with {settleFriend.name}?</AlertDialogTitle>
+                                                <AlertDialogDescription>
+                                                    This will mark your balance of {formatCurrency(Math.abs(settleFriend.balance || 0))} with {settleFriend.name} as settled. This action assumes an offline payment was made and will remove the debt from the system.
+                                                </AlertDialogDescription>
+                                            </AlertDialogHeader>
+                                            <AlertDialogFooter>
+                                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                <AlertDialogAction onClick={handleSettle} disabled={isSettling}>
+                                                    {isSettling && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                                    Confirm Settlement
+                                                </AlertDialogAction>
+                                            </AlertDialogFooter>
+                                        </>
+                                    ) : messageFriend ? (
+                                        <>
+                                            <AlertDialogHeader>
+                                                <AlertDialogTitle>Message {messageFriend.name}</AlertDialogTitle>
+                                                <AlertDialogDescription>
+                                                Send a quick message or reminder to your friend.
+                                                </AlertDialogDescription>
+                                            </AlertDialogHeader>
+                                            <div className="flex w-full items-center space-x-2 py-4">
+                                                <Input 
+                                                    id="message" 
+                                                    placeholder="Type your message..." 
+                                                    className="flex-1"
+                                                    value={messageText}
+                                                    onChange={(e) => setMessageText(e.target.value)}
+                                                    disabled={isSendingMessage}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter') {
+                                                            e.preventDefault();
+                                                            handleSendMessage();
+                                                        }
+                                                    }}
+                                                />
+                                                <Button type="submit" size="icon" onClick={handleSendMessage} disabled={isSendingMessage || !messageText.trim()}>
+                                                    {isSendingMessage ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                                                </Button>
+                                            </div>
+                                            <AlertDialogFooter className="sm:justify-start">
+                                                <AlertDialogCancel>Close</AlertDialogCancel>
+                                            </AlertDialogFooter>
+                                        </>
+                                    ) : null}
+                                </AlertDialogContent>
+                             </AlertDialog>
                         </div>
                         ))}
                         {friendsWithBalances.length === 0 && (
                             <div className="col-span-full flex flex-col items-center justify-center text-center text-muted-foreground h-full rounded-lg border-2 border-dashed border-muted/50 py-12">
                                 <h3 className="text-xl font-bold mb-2">No friends yet</h3>
-                                <p className="mb-4">Add expenses with new people to see them here.</p>
+                                <p className="mb-4">Add your friends to start sharing expenses with them.</p>
                             </div>
                         )}
                     </div>
@@ -247,58 +344,6 @@ export default function FriendsPage() {
             </Card>
         </main>
       </div>
-
-       {/* This single AlertDialogContent is used for both Settle and Message actions */}
-      <AlertDialogContent>
-         {settleFriend ? (
-            <>
-                <AlertDialogHeader>
-                    <AlertDialogTitle>Settle with {settleFriend.name}?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                        This will mark your balance of {formatCurrency(Math.abs(settleFriend.balance || 0))} with {settleFriend.name} as settled. This action assumes an offline payment was made and will remove the debt from the system.
-                    </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleSettle} disabled={isSettling}>
-                        {isSettling && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                        Confirm Settlement
-                    </AlertDialogAction>
-                </AlertDialogFooter>
-            </>
-         ) : messageFriend ? (
-             <>
-                <AlertDialogHeader>
-                    <AlertDialogTitle>Message {messageFriend.name}</AlertDialogTitle>
-                    <AlertDialogDescription>
-                       Send a quick message or reminder to your friend.
-                    </AlertDialogDescription>
-                </AlertDialogHeader>
-                <div className="flex w-full items-center space-x-2 py-4">
-                    <Input 
-                        id="message" 
-                        placeholder="Type your message..." 
-                        className="flex-1"
-                        value={messageText}
-                        onChange={(e) => setMessageText(e.target.value)}
-                        disabled={isSendingMessage}
-                        onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                                e.preventDefault();
-                                handleSendMessage();
-                            }
-                        }}
-                    />
-                    <Button type="submit" size="icon" onClick={handleSendMessage} disabled={isSendingMessage || !messageText.trim()}>
-                        {isSendingMessage ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                    </Button>
-                </div>
-                <AlertDialogFooter className="sm:justify-start">
-                    <AlertDialogCancel>Close</AlertDialogCancel>
-                </AlertDialogFooter>
-            </>
-         ) : null}
-      </AlertDialogContent>
-    </AlertDialog>
+    </>
   );
 }
