@@ -32,26 +32,25 @@ import { CreateGroupDialog } from "./create-group-dialog";
 
 export function CommandMenu() {
   const router = useRouter();
-  const [open, setOpen] = React.useState(false);
+  const { isCommandMenuOpen, setCommandMenuOpen, expenses, groups, users, balances, currentUser } = useSettleSmart();
+  
   const [addExpenseOpen, setAddExpenseOpen] = React.useState(false);
   const [createGroupOpen, setCreateGroupOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
   const [aiResponse, setAiResponse] = React.useState("");
   const [isThinking, setIsThinking] = React.useState(false);
   
-  const { expenses, groups, users, balances, currentUser } = useSettleSmart();
-
   React.useEffect(() => {
     const down = (e: KeyboardEvent) => {
       if (e.key === "/" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
-        setOpen((open) => !open);
+        setCommandMenuOpen(!isCommandMenuOpen);
       }
     };
 
     document.addEventListener("keydown", down);
     return () => document.removeEventListener("keydown", down);
-  }, []);
+  }, [isCommandMenuOpen, setCommandMenuOpen]);
 
   React.useEffect(() => {
     // Reset AI state when query changes
@@ -60,7 +59,7 @@ export function CommandMenu() {
   }, [query]);
   
   const runCommand = (command: () => void) => {
-    setOpen(false);
+    setCommandMenuOpen(false);
     command();
   };
   
@@ -85,7 +84,7 @@ export function CommandMenu() {
 
   return (
     <>
-      <CommandDialog open={open} onOpenChange={setOpen}>
+      <CommandDialog open={isCommandMenuOpen} onOpenChange={setCommandMenuOpen}>
          <DialogTitle className="sr-only">Command Menu</DialogTitle>
             <CommandInput 
                 placeholder="Ask AI or type a command..."
@@ -110,14 +109,12 @@ export function CommandMenu() {
 
         {!showAiResponse && (
           <>
-            {query && (
-                 <CommandGroup heading="AI Assistant">
-                    <CommandItem onSelect={handleAiQuery}>
-                        <Sparkles className="mr-2 h-4 w-4" />
-                        <span>Ask AI: "{query}"</span>
-                    </CommandItem>
-                </CommandGroup>
-            )}
+            <CommandGroup heading="AI Assistant">
+                <CommandItem onSelect={handleAiQuery}>
+                    <Sparkles className="mr-2 h-4 w-4" />
+                    <span>Ask AI: "{query}"</span>
+                </CommandItem>
+            </CommandGroup>
 
             <CommandGroup heading="Navigation">
                 <CommandItem onSelect={() => runCommand(() => router.push('/'))}>

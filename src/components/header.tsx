@@ -15,7 +15,7 @@ interface HeaderProps {
 }
 
 export function Header({ pageTitle = "Dashboard" }: HeaderProps) {
-    const { currentUser, friendships, chats } = useSettleSmart();
+    const { currentUser, friendships, chats, setCommandMenuOpen } = useSettleSmart();
     const router = useRouter();
 
     const friendRequestCount = useMemo(() => {
@@ -36,11 +36,11 @@ export function Header({ pageTitle = "Dashboard" }: HeaderProps) {
              <h1 className="text-lg font-semibold md:text-xl">{pageTitle}</h1>
           </div>
           <div className="flex flex-1 items-center gap-4 md:ml-auto md:gap-2 lg:gap-4">
-              <Button variant="outline" className="gap-2 text-muted-foreground pr-2 hidden md:flex">
+              <Button variant="outline" className="gap-2 text-muted-foreground pr-2 hidden md:flex" onClick={() => setCommandMenuOpen(true)}>
                 <Command className="h-4 w-4" />
                 <span className="hidden md:inline-block">Search...</span>
                 <kbd className="hidden md:inline-block pointer-events-none select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium opacity-100">
-                    <span className="text-xs">/</span>
+                    <span className="text-xs">⌘/</span>
                 </kbd>
               </Button>
             <DropdownMenu>

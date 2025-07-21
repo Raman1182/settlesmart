@@ -67,6 +67,8 @@ interface SettleSmartContextType {
   signIn: (email: string, pass: string) => Promise<any>;
   signOut: () => Promise<void>;
   addAdHocUser: (name: string) => Promise<User>;
+  isCommandMenuOpen: boolean;
+  setCommandMenuOpen: (open: boolean) => void;
 }
 
 const SettleSmartContext = createContext<SettleSmartContextType | undefined>(undefined);
@@ -81,6 +83,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const [friendships, setFriendships] = useState<Friendship[]>([]);
   const [rawChats, setRawChats] = useState<Omit<Chat, 'participants'>[]>([]);
   const [groupChecklists, setGroupChecklists] = useState<{ [groupId: string]: ChecklistItem[] }>({});
+  const [isCommandMenuOpen, setCommandMenuOpen] = useState(false);
 
   const [auth, setAuth] = useState<Auth | null>(null);
   const [db, setDb] = useState<Firestore | null>(null);
@@ -762,6 +765,8 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     signIn,
     signOut,
     addAdHocUser,
+    isCommandMenuOpen,
+    setCommandMenuOpen,
   };
 
   return (
@@ -778,6 +783,3 @@ export const useSettleSmart = (): SettleSmartContextType => {
   }
   return context;
 };
-
-
-    

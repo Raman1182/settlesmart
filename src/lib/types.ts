@@ -75,5 +75,3 @@ export interface Chat {
     lastMessage: Message | null;
     unreadCount: { [userId: string]: number };
 }
-
-    
