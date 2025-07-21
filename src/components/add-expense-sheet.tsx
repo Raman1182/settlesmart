@@ -62,11 +62,18 @@ export function AddExpenseSheet() {
     defaultValues: {
       description: "",
       amount: 0,
-      paidById: currentUser.id,
+      paidById: currentUser?.id || "",
       splitWith: [],
       groupId: "",
     },
   });
+  
+  // Effect to update paidById when currentUser changes
+  useState(() => {
+    if (currentUser) {
+      form.setValue('paidById', currentUser.id);
+    }
+  }, [currentUser, form]);
 
   const handleParse = () => {
     if (!nlInput) return;
@@ -81,7 +88,7 @@ export function AddExpenseSheet() {
             .map(name => users.find(u => u.name.toLowerCase() === name.toLowerCase())?.id)
             .filter((id): id is string => !!id);
           
-          if(!participantIds.includes(currentUser.id)) {
+          if(currentUser && !participantIds.includes(currentUser.id)) {
             participantIds.push(currentUser.id);
           }
 
@@ -115,7 +122,7 @@ export function AddExpenseSheet() {
         form.reset({
           description: "",
           amount: 0,
-          paidById: currentUser.id,
+          paidById: currentUser?.id || "",
           splitWith: [],
           groupId: "",
         });

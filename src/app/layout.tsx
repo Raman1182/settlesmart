@@ -18,7 +18,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`dark ${inter.variable}`} suppressHydrationWarning>
-      <body className="font-sans antialiased bg-gray-50 dark:bg-gray-950">
+      <body className="font-sans antialiased bg-background text-foreground">
         <SettleSmartProvider>
           {children}
           <Toaster />

@@ -32,7 +32,7 @@ export function Dashboard() {
   }
 
   return (
-    <div className="grid min-h-screen w-full md:grid-cols-[240px_1fr] lg:grid-cols-[280px_1fr] bg-muted/40">
+    <div className="grid min-h-screen w-full md:grid-cols-[240px_1fr] lg:grid-cols-[280px_1fr]">
       <AppSidebar />
       <div className="flex flex-col">
         <Header />

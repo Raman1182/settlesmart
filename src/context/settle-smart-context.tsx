@@ -117,6 +117,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
       } else {
         setCurrentUser(null);
         setGroups([]);
+        setExpenses([]);
         setIsLoading(false);
       }
     });
@@ -142,6 +143,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const findUserById = useCallback((id: string) => users.find(u => u.id === id), [users]);
 
   const addExpense = (expenseData: Omit<Expense, 'id' | 'date'>) => {
+    // This should be updated to write to Firestore
     const newExpense: Expense = {
       ...expenseData,
       id: `exp${Date.now()}`,
@@ -178,6 +180,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
       const updatedData: Partial<User> = { ...data };
       if (data.name) {
           updatedData.initials = getInitials(data.name);
+          // Future improvement: update avatar as well
       }
       
       await updateDoc(userDocRef, updatedData);
@@ -189,8 +192,8 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
       const allEmails = [currentUser.email, ...memberEmails];
       const memberIds = new Set<string>([currentUser.id]);
       
-      if (allEmails.length > 1) {
-          const usersQuery = query(collection(db, "users"), where("email", "in", allEmails));
+      if (memberEmails.length > 0) {
+          const usersQuery = query(collection(db, "users"), where("email", "in", memberEmails));
           const querySnapshot = await getDocs(usersQuery);
           querySnapshot.forEach((doc) => {
               memberIds.add(doc.id);
@@ -213,29 +216,26 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
       if (memberEmailsToAdd.length > 0) {
           const usersQuery = query(collection(db, "users"), where("email", "in", memberEmailsToAdd));
           const querySnapshot = await getDocs(usersQuery);
+          if(querySnapshot.empty && memberEmailsToAdd.length > 0){
+             throw new Error(`User with email ${memberEmailsToAdd[0]} not found.`);
+          }
           querySnapshot.forEach((doc) => {
               membersToAddIds.push(doc.id);
           });
       }
-
-      const updatePayload: any = {};
-      if (membersToAddIds.length > 0) {
-          updatePayload.members = arrayUnion(...membersToAddIds);
-      }
-      if (memberIdsToRemove.length > 0) {
-          if (!updatePayload.members) updatePayload.members = arrayRemove(...memberIdsToRemove);
-          else {
-              // This is more complex; Firestore doesn't support arrayUnion and arrayRemove in the same update.
-              // We will perform a transaction for this.
-              console.error("Combining add and remove in one go is not directly supported, requires transactions.");
-              // For simplicity, we'll do two separate updates. This is not atomic.
-              await updateDoc(groupRef, { members: arrayRemove(...memberIdsToRemove) });
-              await updateDoc(groupRef, { members: arrayUnion(...membersToAddIds) });
-              return;
-          }
-      }
       
-      await updateDoc(groupRef, updatePayload);
+      // Firestore does not support arrayUnion and arrayRemove in the same update.
+      // We will perform a transaction or batched write for this.
+      const batch = writeBatch(db);
+
+      if (memberIdsToRemove.length > 0) {
+          batch.update(groupRef, { members: arrayRemove(...memberIdsToRemove) });
+      }
+      if (membersToAddIds.length > 0) {
+         batch.update(groupRef, { members: arrayUnion(...membersToAddIds) });
+      }
+
+      await batch.commit();
   };
 
 
