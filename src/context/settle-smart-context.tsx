@@ -4,7 +4,7 @@
 import React, { createContext, useContext, useState, useMemo, useCallback, useEffect } from "react";
 import { initializeApp, getApps, getApp, type FirebaseApp } from "firebase/app";
 import { getAuth, onAuthStateChanged, User as FirebaseUser, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut, type Auth } from "firebase/auth";
-import { getFirestore, collection, addDoc, query, where, onSnapshot, doc, updateDoc, serverTimestamp, getDocs, orderBy, deleteDoc, getDoc, setDoc, arrayUnion, arrayRemove, writeBatch, type Firestore } from "firebase/firestore";
+import { getFirestore, collection, addDoc, query, where, onSnapshot, doc, updateDoc, serverTimestamp, getDocs, orderBy, deleteDoc, getDoc, setDoc, arrayUnion, arrayRemove, writeBatch, type Firestore, enableIndexedDbPersistence } from "firebase/firestore";
 import { firebaseConfig } from "@/lib/firebase";
 import type { User, Group, Expense, Participant, UnequalSplit, ChecklistItem } from "@/lib/types";
 
@@ -73,6 +73,15 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
     const authInstance = getAuth(app);
     const dbInstance = getFirestore(app);
+
+    enableIndexedDbPersistence(dbInstance).catch((err) => {
+        if (err.code == 'failed-precondition') {
+            console.warn("Firestore persistence failed: Multiple tabs open, persistence can only be enabled in one tab at a a time.");
+        } else if (err.code == 'unimplemented') {
+            console.warn("Firestore persistence failed: The current browser does not support all of the features required to enable persistence.");
+        }
+    });
+
     setAuth(authInstance);
     setDb(dbInstance);
 
@@ -471,5 +480,7 @@ export const useSettleSmart = (): SettleSmartContextType => {
   }
   return context;
 };
+
+    
 
     
