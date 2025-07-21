@@ -13,6 +13,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import type { User } from "@/lib/types";
 import { useToast } from "@/components/ui/use-toast";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { TrustScoreIndicator } from "@/components/trust-score-indicator";
 
 interface FriendWithBalance {
     id: string;
@@ -21,6 +22,7 @@ interface FriendWithBalance {
     avatar?: string;
     initials: string;
     balance: number;
+    isRegistered: boolean;
 }
 
 
@@ -41,7 +43,8 @@ export default function FriendsPage() {
                 email: u.email,
                 avatar: u.avatar,
                 initials: u.initials,
-                balance: 0
+                balance: 0,
+                isRegistered: !!u.email,
             });
         }
     });
@@ -66,6 +69,7 @@ export default function FriendsPage() {
                 name: participant.name,
                 initials: participant.name.charAt(0).toUpperCase(),
                 balance: 0,
+                isRegistered: !!participant.email,
             };
             friendMap.set(friendId, friend);
         }
@@ -108,6 +112,32 @@ export default function FriendsPage() {
     });
   }
 
+  const getFriendTrustScore = (balance: number) => {
+    // 1. lending to someone inc score - good
+    // 2. borrowing dec it - bad
+    // 3. repaying inc it - not tracked yet, but lower debt is good
+    // 4. more debt decit - bad
+
+    // If friend owes me, their score is lower
+    // If I owe friend, their score is higher
+    let score = 50; // Start with a neutral score
+    
+    // balance > 0 means friend owes me, which is a negative for their score
+    // balance < 0 means I owe friend, which is a positive for their score
+    score -= balance / 10; 
+
+    return Math.max(0, Math.min(100, score));
+  }
+  
+  const handleShowTrustScore = (friend: FriendWithBalance) => {
+      const score = getFriendTrustScore(friend.balance);
+      const scoreType = friend.isRegistered ? "Public" : "Personal";
+      toast({
+          title: `${friend.name}'s Trust Score`,
+          description: `${scoreType} Trust Score is ${score.toFixed(0)}. Higher is better!`
+      })
+  }
+
   return (
     <AlertDialog>
       <div className="flex flex-col min-h-screen w-full">
@@ -132,6 +162,9 @@ export default function FriendsPage() {
                                     {friend.balance > 0.01 ? `Owes you ${formatCurrency(Math.abs(friend.balance))}` : friend.balance < -0.01 ? `You owe ${formatCurrency(Math.abs(friend.balance))}` : 'Settled up'}
                                 </p>
                             </div>
+                             <div className="w-24">
+                                <TrustScoreIndicator score={getFriendTrustScore(friend.balance)} />
+                             </div>
                             <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
                                     <Button variant="ghost" size="icon">
@@ -145,11 +178,11 @@ export default function FriendsPage() {
                                             Settle Up
                                         </DropdownMenuItem>
                                     </AlertDialogTrigger>
-                                    <DropdownMenuItem disabled>
+                                    <DropdownMenuItem disabled={!friend.isRegistered}>
                                         <MessageSquare className="mr-2 h-4 w-4" />
                                         Message
                                     </DropdownMenuItem>
-                                     <DropdownMenuItem disabled>
+                                     <DropdownMenuItem onClick={() => handleShowTrustScore(friend)}>
                                         <ShieldCheck className="mr-2 h-4 w-4" />
                                         View Trust Score
                                     </DropdownMenuItem>
