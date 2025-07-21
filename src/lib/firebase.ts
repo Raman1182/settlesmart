@@ -1,5 +1,10 @@
+
 // Your web app's Firebase configuration
 import { initializeApp, getApp, getApps } from "firebase/app";
+import { getFirestore, setLogLevel } from "firebase/firestore";
+
+// Enable debug logging
+setLogLevel('debug');
 
 export const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -13,3 +18,5 @@ export const firebaseConfig = {
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
 export { app };
+
+    
