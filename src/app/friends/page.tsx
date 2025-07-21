@@ -7,8 +7,8 @@ import { useSettleSmart } from "@/context/settle-smart-context";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Loader2, Plus, UserPlus, Check, X, UserMinus, MessageSquare, MoreVertical, Shield } from "lucide-react";
-import type { User, Friendship } from "@/lib/types";
+import { Loader2, Plus, UserPlus, Check, X, UserMinus, MessageSquare, MoreVertical, Shield, History } from "lucide-react";
+import type { User, Friendship, Expense } from "@/lib/types";
 import { useToast } from "@/components/ui/use-toast";
 import { useRouter } from "next/navigation";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -16,14 +16,26 @@ import { Badge } from "@/components/ui/badge";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import {
   AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
   AlertDialogContent,
   AlertDialogHeader,
   AlertDialogTitle,
   AlertDialogDescription,
   AlertDialogFooter,
-  AlertDialogCancel,
+  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { TrustScoreIndicator } from "@/components/trust-score-indicator";
+import { formatCurrency, cn } from "@/lib/utils";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { format } from "date-fns";
 
 
 export default function FriendsPage() {
@@ -36,14 +48,18 @@ export default function FriendsPage() {
     acceptFriendRequest, 
     declineFriendRequest,
     removeFriend,
+    settleFriendDebt,
     chats,
+    expenses,
+    findUserById,
     calculateUserTrustScore,
   } = useSettleSmart();
   const { toast } = useToast();
   const router = useRouter();
   const [isProcessing, startProcessingTransition] = useTransition();
   const [selectedFriendForScore, setSelectedFriendForScore] = useState<User | null>(null);
-  
+  const [selectedFriendForHistory, setSelectedFriendForHistory] = useState<User | null>(null);
+
   useEffect(() => {
     if (!isAuthLoading && !currentUser) {
       router.replace("/login");
@@ -59,17 +75,18 @@ export default function FriendsPage() {
     const mySentRequests = new Set<string>();
 
     friendships.forEach(f => {
+      if (f.status !== 'accepted' && f.status !== 'pending') return;
       const friendId = f.requesterId === currentUser.id ? f.receiverId : f.requesterId;
+      const user = users.find(u => u.id === friendId);
+      
+      if (!user) return;
+
       if (f.status === 'accepted') {
-        const user = users.find(u => u.id === friendId);
-        if (user) {
-          currentFriends.push(user);
-          myFriendshipIds.add(user.id);
-        }
+        currentFriends.push(user);
+        myFriendshipIds.add(user.id);
       } else if (f.status === 'pending') {
           if (f.receiverId === currentUser.id) {
-            const user = users.find(u => u.id === f.requesterId);
-            if (user) requests.push({ friendship: f, user });
+            requests.push({ friendship: f, user });
           } else if (f.requesterId === currentUser.id) {
             mySentRequests.add(f.receiverId);
           }
@@ -128,6 +145,92 @@ export default function FriendsPage() {
         toast({ variant: "destructive", title: "Error", description: error.message });
       }
     });
+  }
+
+  const TransactionHistoryDialog = () => {
+    const friend = selectedFriendForHistory;
+    if (!friend || !currentUser) return null;
+
+     const { netBalance, transactionHistory } = useMemo(() => {
+        let balance = 0;
+        const history: Expense[] = [];
+        
+        expenses.forEach(e => {
+            const participants = new Set(e.splitWith);
+            if (!e.groupId && participants.has(currentUser.id) && participants.has(friend.id) && participants.size === 2) {
+                history.push(e);
+                if (e.status === 'unsettled') {
+                    const amountPerPerson = e.amount / 2;
+                    if (e.paidById === currentUser.id) {
+                        balance += amountPerPerson;
+                    } else {
+                        balance -= amountPerPerson;
+                    }
+                }
+            }
+        });
+        
+        history.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        return { netBalance: balance, transactionHistory: history };
+
+    }, [currentUser, friend, expenses]);
+
+    const handleSettle = async () => {
+      if (!friend) return;
+        await settleFriendDebt(friend.id);
+        setSelectedFriendForHistory(null);
+    }
+    const isSettled = Math.abs(netBalance) < 0.01;
+
+    return (
+        <Dialog open={!!selectedFriendForHistory} onOpenChange={(open) => !open && setSelectedFriendForHistory(null)}>
+            <DialogContent className="max-w-lg">
+                <DialogHeader>
+                    <DialogTitle>History with {friend.name}</DialogTitle>
+                    <DialogDescription>
+                         {isSettled && "You are all settled up!"}
+                         {!isSettled && netBalance > 0 && `${friend.name} owes you ${formatCurrency(netBalance)}`}
+                         {!isSettled && netBalance < 0 && `You owe ${friend.name} ${formatCurrency(Math.abs(netBalance))}`}
+                    </DialogDescription>
+                </DialogHeader>
+                <ScrollArea className="max-h-[60vh]">
+                    <div className="pr-4 space-y-2">
+                    {transactionHistory.length > 0 ? transactionHistory.map(e => (
+                        <div key={e.id} className="flex items-center justify-between text-sm p-2 rounded-md bg-muted/50">
+                            <div>
+                                <p className="font-medium">{e.description}</p>
+                                <p className="text-xs text-muted-foreground">
+                                    Paid by {findUserById(e.paidById)?.name} on {format(new Date(e.date), "MMM d, yyyy")}
+                                </p>
+                            </div>
+                            <div className="text-right">
+                                  <p className="font-mono">{formatCurrency(e.amount)}</p>
+                                  <Badge variant={e.status === 'settled' ? 'secondary' : 'default'}>{e.status}</Badge>
+                            </div>
+                        </div>
+                    )) : <p className="text-center text-muted-foreground py-4">No 1-on-1 transactions yet.</p>}
+                    </div>
+                </ScrollArea>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button disabled={isSettled}>Settle Up</Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                      <AlertDialogHeader>
+                          <AlertDialogTitle>Settle debts with {friend.name}?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                              This will mark all outstanding 1-on-1 expenses between you and {friend.name} as settled. This action cannot be undone.
+                          </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction onClick={handleSettle}>Yes, Settle Up</AlertDialogAction>
+                      </AlertDialogFooter>
+                  </AlertDialogContent>
+              </AlertDialog>
+            </DialogContent>
+        </Dialog>
+    )
   }
   
   if (isAuthLoading || !currentUser) {
@@ -188,13 +291,17 @@ export default function FriendsPage() {
                                     </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
-                                    <DropdownMenuItem onSelect={() => handleRemoveFriend(friend.id)}>
-                                        <UserMinus className="mr-2 h-4 w-4 text-destructive" />
-                                        <span className="text-destructive">Unfriend</span>
+                                    <DropdownMenuItem onSelect={() => setSelectedFriendForHistory(friend)}>
+                                        <History className="mr-2 h-4 w-4" />
+                                        <span>Transaction History</span>
                                     </DropdownMenuItem>
                                     <DropdownMenuItem onSelect={() => setSelectedFriendForScore(friend)}>
                                         <Shield className="mr-2 h-4 w-4" />
                                         <span>Trust Score</span>
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onSelect={() => handleRemoveFriend(friend.id)}>
+                                        <UserMinus className="mr-2 h-4 w-4 text-destructive" />
+                                        <span className="text-destructive">Unfriend</span>
                                     </DropdownMenuItem>
                                 </DropdownMenuContent>
                               </DropdownMenu>
@@ -314,6 +421,8 @@ export default function FriendsPage() {
                 </AlertDialogFooter>
             </AlertDialogContent>
         </AlertDialog>
+
+        <TransactionHistoryDialog />
     </>
   );
 }

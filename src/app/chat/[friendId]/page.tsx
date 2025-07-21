@@ -36,120 +36,6 @@ import {
 } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge";
 
-function ChatSettleUp({ friendId }: { friendId: string }) {
-    const { currentUser, findUserById, settleFriendDebt, sendMessage, expenses } = useSettleSmart();
-    const friend = findUserById(friendId);
-    const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
-
-    const { netBalance, transactionHistory } = useMemo(() => {
-        if (!currentUser || !friend) return { netBalance: 0, transactionHistory: [] };
-        
-        let balance = 0;
-        const history: Expense[] = [];
-        
-        expenses.forEach(e => {
-            const participants = new Set(e.splitWith);
-            if (!e.groupId && participants.has(currentUser.id) && participants.has(friendId) && participants.size === 2) {
-                history.push(e);
-                if (e.status === 'unsettled') {
-                    const amountPerPerson = e.amount / 2;
-                    if (e.paidById === currentUser.id) {
-                        balance += amountPerPerson;
-                    } else {
-                        balance -= amountPerPerson;
-                    }
-                }
-            }
-        });
-        
-        history.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-        return { netBalance: balance, transactionHistory: history };
-
-    }, [currentUser, friend, expenses]);
-
-    const handleSettle = async () => {
-        await settleFriendDebt(friendId);
-    }
-
-    const handleRemind = async () => {
-        if (!currentUser || !friend) return;
-        const reminderText = `Just a friendly reminder to settle our balance of ${formatCurrency(Math.abs(netBalance))}. Thanks!`;
-        await sendMessage(friendId, reminderText);
-    }
-
-    if (!friend) return null;
-    const isSettled = Math.abs(netBalance) < 0.01;
-    const friendOwes = netBalance > 0;
-    const userOwes = netBalance < 0;
-
-    return (
-        <Card className="mb-4">
-            <CardContent className="p-4 flex items-center justify-between">
-                <div>
-                    <p className="font-bold">
-                        {isSettled && "You are all settled up!"}
-                        {friendOwes && `${friend.name} owes you ${formatCurrency(netBalance)}`}
-                        {userOwes && `You owe ${friend.name} ${formatCurrency(Math.abs(netBalance))}`}
-                    </p>
-                    <p className="text-xs text-muted-foreground">Across all your 1-on-1 expenses.</p>
-                </div>
-                <div className="flex gap-2">
-                    {friendOwes && <Button size="sm" onClick={handleRemind}>Remind</Button>}
-                    <Dialog open={historyDialogOpen} onOpenChange={setHistoryDialogOpen}>
-                        <DialogTrigger asChild>
-                           <Button size="sm" variant="ghost"><History className="h-4 w-4" /></Button>
-                        </DialogTrigger>
-                        <DialogContent className="max-w-lg">
-                            <DialogHeader>
-                                <DialogTitle>Transaction History with {friend.name}</DialogTitle>
-                                <DialogDescription>A complete record of your 1-on-1 expenses.</DialogDescription>
-                            </DialogHeader>
-                            <ScrollArea className="max-h-[60vh]">
-                                <div className="pr-4 space-y-2">
-                                {transactionHistory.length > 0 ? transactionHistory.map(e => (
-                                    <div key={e.id} className="flex items-center justify-between text-sm p-2 rounded-md bg-muted/50">
-                                        <div>
-                                            <p className="font-medium">{e.description}</p>
-                                            <p className="text-xs text-muted-foreground">
-                                                Paid by {findUserById(e.paidById)?.name} on {format(new Date(e.date), "MMM d, yyyy")}
-                                            </p>
-                                        </div>
-                                        <div className="text-right">
-                                             <p className="font-mono">{formatCurrency(e.amount)}</p>
-                                             <Badge variant={e.status === 'settled' ? 'secondary' : 'default'}>{e.status}</Badge>
-                                        </div>
-                                    </div>
-                                )) : <p className="text-center text-muted-foreground py-4">No transactions yet.</p>}
-                                </div>
-                            </ScrollArea>
-                        </DialogContent>
-                    </Dialog>
-                    {!isSettled && (
-                        <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                                <Button size="sm" variant="secondary">Settle</Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                                <AlertDialogHeader>
-                                    <AlertDialogTitle>Settle debts with {friend.name}?</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                        This will mark all outstanding 1-on-1 expenses between you and {friend.name} as settled. This action cannot be undone.
-                                    </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                    <AlertDialogAction onClick={handleSettle}>Yes, Settle Up</AlertDialogAction>
-                                </AlertDialogFooter>
-                            </AlertDialogContent>
-                        </AlertDialog>
-                    )}
-                </div>
-            </CardContent>
-        </Card>
-    );
-}
-
-
 export default function ChatPage() {
   const { friendId: friendIdParam } = useParams();
   const friendId = friendIdParam as string;
@@ -237,7 +123,6 @@ export default function ChatPage() {
                 <h1 className="text-xl font-bold">{friend.name}</h1>
             </div>
         </div>
-        <ChatSettleUp friendId={friend.id} />
         <Card className="flex-1 flex flex-col p-0">
           <ScrollArea className="flex-1" ref={scrollAreaRef}>
             <div className="p-4 space-y-6">
