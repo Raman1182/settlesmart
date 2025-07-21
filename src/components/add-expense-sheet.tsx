@@ -24,12 +24,12 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm } from "react-hook-form";
+import { useFieldArray, useForm } from "react-hook-form";
 import { z } from "zod";
 import { useSettleSmart } from "@/context/settle-smart-context";
 import { parseExpense } from "@/ai/flows/parse-expense-from-natural-language";
 import { categorizeExpense } from "@/ai/flows/categorize-expense";
-import { DollarSign, Loader2, Plus, Sparkles, Camera } from "lucide-react";
+import { DollarSign, Loader2, Plus, Sparkles, Camera, Equal, Repeat } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { Checkbox } from "./ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
@@ -37,6 +37,13 @@ import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 import type { User, Participant } from "@/lib/types";
 import { SheetTrigger } from "./ui/sheet";
 import { Badge } from "./ui/badge";
+import { ToggleGroup, ToggleGroupItem } from "./ui/toggle-group";
+import { Switch } from "./ui/switch";
+
+const splitSchema = z.object({
+  participantId: z.string(),
+  amount: z.coerce.number().optional(),
+});
 
 const expenseFormSchema = z.object({
   description: z.string().min(2, {
@@ -47,8 +54,21 @@ const expenseFormSchema = z.object({
   }),
   paidById: z.string().nonempty({ message: "Please select who paid." }),
   splitWith: z.array(z.string()).min(1, { message: "Select at least one person to split with." }),
+  splitType: z.enum(['equally', 'unequally']).default('equally'),
+  unequalSplits: z.array(splitSchema).optional(),
   groupId: z.string().optional(),
+}).refine(data => {
+    if (data.splitType === 'unequally') {
+        const totalSplit = data.unequalSplits?.reduce((sum, s) => sum + (s.amount || 0), 0) ?? 0;
+        // Allow for small floating point inaccuracies
+        return Math.abs(totalSplit - data.amount) < 0.01;
+    }
+    return true;
+}, {
+    message: "The sum of the individual amounts must equal the total expense amount.",
+    path: ["unequalSplits"],
 });
+
 
 interface AddExpenseSheetProps {
   children?: React.ReactNode;
@@ -76,15 +96,35 @@ export function AddExpenseSheet({ children, open, onOpenChange }: AddExpenseShee
       amount: 0,
       paidById: "",
       splitWith: [],
+      splitType: 'equally',
+      unequalSplits: [],
       groupId: "",
     },
   });
   
+  const { fields, replace } = useFieldArray({
+    control: form.control,
+    name: "unequalSplits",
+  });
+  
+  const splitWith = form.watch("splitWith");
+  const splitType = form.watch("splitType");
+  const totalAmount = form.watch("amount");
+  const unequalSplits = form.watch("unequalSplits");
+
   useEffect(() => {
     if (currentUser && controlledOpen) {
       form.setValue('paidById', currentUser.id);
     }
   }, [currentUser, controlledOpen, form]);
+
+  useEffect(() => {
+    const newSplits = splitWith.map(pId => {
+        const existing = unequalSplits?.find(s => s.participantId === pId);
+        return { participantId: pId, amount: existing?.amount || 0};
+    });
+    replace(newSplits);
+  }, [splitWith, replace]);
 
   const handleParse = () => {
     if (!nlInput) return;
@@ -98,7 +138,7 @@ export function AddExpenseSheet({ children, open, onOpenChange }: AddExpenseShee
           const participantNames = result.participants.map(p => p.toLowerCase());
           const finalParticipants: Participant[] = [];
           const newAdHoc: string[] = [];
-
+          
           participantNames.forEach(name => {
              const isCurrentUser = ['you', 'me', 'i'].includes(name);
              const user = isCurrentUser 
@@ -108,17 +148,16 @@ export function AddExpenseSheet({ children, open, onOpenChange }: AddExpenseShee
             if (user) {
               if(!finalParticipants.includes(user.id)) finalParticipants.push(user.id);
             } else if (!isCurrentUser) {
-              if(!finalParticipants.includes(name)) finalParticipants.push(name);
-              if(!newAdHoc.includes(name)) newAdHoc.push(name);
+               if(!finalParticipants.includes(name)) finalParticipants.push(name);
+               if(!newAdHoc.includes(name)) newAdHoc.push(name);
             }
           });
-
-          // Ensure current user is always included if mentioned
+          
           if (participantNames.some(p => ['you', 'me', 'i'].includes(p))) {
             if(!finalParticipants.includes(currentUser.id)) finalParticipants.push(currentUser.id);
           }
           
-          setAdHocParticipants(newAdHoc);
+          setAdHocParticipants(prev => [...new Set([...prev, ...newAdHoc])]);
           form.setValue("splitWith", finalParticipants);
 
           toast({
@@ -160,35 +199,46 @@ export function AddExpenseSheet({ children, open, onOpenChange }: AddExpenseShee
   };
   
   const selectedGroupId = form.watch("groupId");
-  const splitWith = form.watch("splitWith");
 
   const participantsToDisplay = useMemo(() => {
-    const participantList: (User | { id: string; name: string; isAdHoc: true })[] = [];
+    const participantList: (User | { id: string; name: string; isAdHoc: true; initials: string })[] = [];
     const addedIds = new Set<string>();
 
-    const addParticipant = (p: User | { id: string; name: string; isAdHoc: true }) => {
+    const addParticipant = (p: User | { id: string; name: string; isAdHoc: true; initials: string }) => {
         if (!addedIds.has(p.id)) {
             participantList.push(p);
             addedIds.add(p.id);
         }
     };
     
+    // First add participants from group if selected
     if (selectedGroupId) {
         const group = groups.find(g => g.id === selectedGroupId);
         group?.members.map(id => findUserById(id)).filter(Boolean).forEach(u => addParticipant(u as User));
-    } else {
-        splitWith.forEach(p => {
-            const user = findUserById(p);
-            if (user) {
-                addParticipant(user);
-            } else {
-                 addParticipant({ id: p, name: p, isAdHoc: true });
-            }
-        });
     }
     
+    // Then add any other participants (from NL input or manual)
+    splitWith.forEach(pId => {
+        const user = findUserById(pId);
+        if (user) {
+            addParticipant(user);
+        } else if (adHocParticipants.includes(pId)) {
+             addParticipant({ id: pId, name: pId, isAdHoc: true, initials: pId.charAt(0).toUpperCase() });
+        }
+    });
+    
     return participantList;
-  }, [selectedGroupId, groups, findUserById, splitWith]);
+  }, [selectedGroupId, groups, findUserById, splitWith, adHocParticipants]);
+
+  const payerOptions = useMemo(() => {
+    return participantsToDisplay.filter(p => !('isAdHoc' in p)) as User[];
+  }, [participantsToDisplay]);
+
+  const remainingToSplit = useMemo(() => {
+    if (splitType === 'equally') return 0;
+    const currentSplitTotal = unequalSplits?.reduce((sum, s) => sum + (s.amount || 0), 0) ?? 0;
+    return totalAmount - currentSplitTotal;
+  }, [splitType, totalAmount, unequalSplits]);
 
 
   const resetForm = () => {
@@ -198,11 +248,12 @@ export function AddExpenseSheet({ children, open, onOpenChange }: AddExpenseShee
         paidById: currentUser?.id || "",
         splitWith: [],
         groupId: "",
+        splitType: 'equally',
+        unequalSplits: []
       });
       setNlInput("");
       setAdHocParticipants([]);
   }
-
 
   return (
     <Sheet open={controlledOpen} onOpenChange={(open) => {
@@ -295,7 +346,7 @@ export function AddExpenseSheet({ children, open, onOpenChange }: AddExpenseShee
                         {groups.map(group => <SelectItem key={group.id} value={group.id}>{group.name}</SelectItem>)}
                       </SelectContent>
                     </Select>
-                    <FormDescription>Selecting a group will pre-fill participants.</FormDescription>
+                    <FormDescription>Selecting a group pre-fills participants.</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -310,12 +361,12 @@ export function AddExpenseSheet({ children, open, onOpenChange }: AddExpenseShee
                       <FormLabel>Paid by</FormLabel>
                        <Select onValueChange={field.onChange} value={field.value} defaultValue={field.value}>
                         <FormControl>
-                          <SelectTrigger disabled={participantsToDisplay.length === 0}>
+                          <SelectTrigger disabled={payerOptions.length === 0}>
                             <SelectValue placeholder="Select who paid" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {participantsToDisplay.map(user => 'isAdHoc' in user ? null : (
+                          {payerOptions.map(user => (
                             <SelectItem key={user.id} value={user.id}>
                               <div className="flex items-center gap-2">
                                 <Avatar className="h-6 w-6">
@@ -342,7 +393,7 @@ export function AddExpenseSheet({ children, open, onOpenChange }: AddExpenseShee
                     <FormItem>
                         <div>
                             <FormLabel className="text-base">Split between</FormLabel>
-                            <FormDescription>Select who this expense should be split with.</FormDescription>
+                            <FormDescription>Select participants for this expense.</FormDescription>
                         </div>
                         <div className="space-y-3 pt-2">
                         {participantsToDisplay.map((item) => (
@@ -394,6 +445,88 @@ export function AddExpenseSheet({ children, open, onOpenChange }: AddExpenseShee
                     )}
                 />
              )}
+            
+            {splitWith.length > 1 && (
+                <FormField
+                    control={form.control}
+                    name="splitType"
+                    render={({ field }) => (
+                        <FormItem>
+                            <FormLabel>Split Method</FormLabel>
+                             <FormControl>
+                                <ToggleGroup 
+                                    type="single" 
+                                    className="w-full grid grid-cols-2"
+                                    value={field.value}
+                                    onValueChange={(value) => {
+                                        if (value) field.onChange(value as 'equally' | 'unequally');
+                                    }}
+                                >
+                                    <ToggleGroupItem value="equally" aria-label="Split equally">
+                                        <Equal className="h-4 w-4 mr-2" />
+                                        Equally
+                                    </ToggleGroupItem>
+                                    <ToggleGroupItem value="unequally" aria-label="Split unequally">
+                                        <Plus className="h-4 w-4 mr-2" />
+                                        Unequally
+                                    </ToggleGroupItem>
+                                </ToggleGroup>
+                             </FormControl>
+                             <FormMessage />
+                        </FormItem>
+                    )}
+                />
+            )}
+
+            {splitType === 'unequally' && (
+                <div>
+                     <div className="space-y-4 rounded-lg border p-4">
+                        <div className="flex justify-between items-center">
+                            <h4 className="font-medium">Split by exact amounts</h4>
+                            <Badge variant={remainingToSplit.toFixed(2) === '0.00' ? "default" : "destructive"}>
+                                {remainingToSplit.toFixed(2)} left
+                            </Badge>
+                        </div>
+                        {fields.map((field, index) => {
+                            const participant = participantsToDisplay.find(p => p.id === field.participantId);
+                            if (!participant) return null;
+                            return (
+                                <FormField
+                                    key={field.id}
+                                    control={form.control}
+                                    name={`unequalSplits.${index}.amount`}
+                                    render={({ field }) => (
+                                        <FormItem className="flex items-center gap-4 space-y-0">
+                                            <FormLabel className="w-2/5 flex items-center gap-2">
+                                                <Avatar className="h-6 w-6">
+                                                    <AvatarImage src={participant.avatar} alt={participant.name} />
+                                                    <AvatarFallback>{participant.initials}</AvatarFallback>
+                                                </Avatar>
+                                                <span>{participant.name}</span>
+                                            </FormLabel>
+                                            <FormControl>
+                                                <Input type="number" className="text-right" placeholder="0.00" {...field} />
+                                            </FormControl>
+                                        </FormItem>
+                                    )}
+                                />
+                            );
+                        })}
+                     </div>
+                      {form.formState.errors.unequalSplits && (
+                          <p className="text-sm font-medium text-destructive pt-2">
+                             {form.formState.errors.unequalSplits.message}
+                          </p>
+                      )}
+                </div>
+            )}
+            
+            <div className="flex items-center space-x-2">
+                <Switch id="recurring-expense" disabled />
+                <Label htmlFor="recurring-expense" className="text-muted-foreground">Make this a recurring expense (coming soon)</Label>
+            </div>
+
+
             </div>
 
             <SheetFooter className="p-6 bg-card/80 border-t border-border/50 mt-auto">

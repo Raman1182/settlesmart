@@ -11,6 +11,11 @@ export type User = {
 // A participant can be a registered user (by ID) or an ad-hoc name (string)
 export type Participant = string; 
 
+export type UnequalSplit = {
+  participantId: string;
+  amount: number;
+}
+
 export type Expense = {
   id: string;
   description: string;
@@ -18,6 +23,8 @@ export type Expense = {
   category: string;
   paidById: string; // Must be a registered user ID
   splitWith: Participant[]; // Array of user IDs or ad-hoc names
+  splitType: 'equally' | 'unequally';
+  unequalSplits?: UnequalSplit[];
   date: string;
   groupId: string | null; // Can be null for expenses not in a group
 };

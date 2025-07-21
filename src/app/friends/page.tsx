@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Header } from "@/components/header";
 import { useSettleSmart } from "@/context/settle-smart-context";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,6 +9,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/utils";
 import { ArrowLeftRight, Shield } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import type { User } from "@/lib/types";
 
 interface FriendWithBalance {
     id: string;
@@ -22,6 +24,7 @@ interface FriendWithBalance {
 
 export default function FriendsPage() {
   const { users, currentUser, balances } = useSettleSmart();
+  const [settleFriend, setSettleFriend] = useState<FriendWithBalance | null>(null);
 
   const friendsWithBalances = useMemo(() => {
     const friendMap: Map<string, FriendWithBalance> = new Map();
@@ -82,6 +85,7 @@ export default function FriendsPage() {
   }, [users, currentUser, balances]);
 
   return (
+    <>
     <div className="flex flex-col min-h-screen w-full">
       <Header pageTitle="Friends" />
       <main className="flex-1 p-4 sm:p-6 md:p-8">
@@ -107,10 +111,12 @@ export default function FriendsPage() {
                  </div>
               </CardContent>
               <CardFooter className="flex flex-col gap-2">
-                 <Button className="w-full" disabled={friend.balance === 0}>
-                    <ArrowLeftRight className="mr-2 h-4 w-4" />
-                    Settle Up
-                </Button>
+                 <AlertDialogTrigger asChild>
+                    <Button className="w-full" disabled={friend.balance === 0} onClick={() => setSettleFriend(friend)}>
+                        <ArrowLeftRight className="mr-2 h-4 w-4" />
+                        Settle Up
+                    </Button>
+                 </AlertDialogTrigger>
                 <div className="flex items-center text-xs text-muted-foreground gap-1 pt-2">
                     <Shield className="h-4 w-4 text-primary/50" />
                     <span>Trust Score: 88 (Reliable)</span>
@@ -127,5 +133,20 @@ export default function FriendsPage() {
         </div>
       </main>
     </div>
+    <AlertDialog>
+        <AlertDialogContent>
+            <AlertDialogHeader>
+            <AlertDialogTitle>Settle with {settleFriend?.name}?</AlertDialogTitle>
+            <AlertDialogDescription>
+                This will mark your balance of {formatCurrency(Math.abs(settleFriend?.balance || 0))} with {settleFriend?.name} as settled. This action assumes an offline payment was made.
+            </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction>Confirm Settlement</AlertDialogAction>
+            </AlertDialogFooter>
+        </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }

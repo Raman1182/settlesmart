@@ -2,8 +2,19 @@
 "use client";
 
 import React, { createContext, useContext, useState, useMemo, useCallback, useEffect } from "react";
-import type { User, Group, Expense, Participant } from "@/lib/types";
+import type { User, Group, Expense, Participant, UnequalSplit } from "@/lib/types";
 import { users as mockUsers, groups as mockGroups, expenses as mockExpenses } from '@/lib/data';
+
+interface AddExpenseData {
+  description: string;
+  amount: number;
+  paidById: string;
+  splitWith: Participant[];
+  splitType: 'equally' | 'unequally';
+  unequalSplits?: UnequalSplit[];
+  groupId: string | null;
+  category: string;
+}
 
 interface SettleSmartContextType {
   currentUser: User;
@@ -11,7 +22,7 @@ interface SettleSmartContextType {
   users: User[];
   groups: Group[];
   expenses: Expense[];
-  addExpense: (expense: Omit<Expense, 'id' | 'date'>) => void;
+  addExpense: (expense: AddExpenseData) => void;
   balances: {
     totalOwedToUser: number;
     totalOwedByUser: number;
@@ -52,7 +63,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
   const findUserById = useCallback((id: string) => users.find(u => u.id === id), [users]);
 
-  const addExpense = (expenseData: Omit<Expense, 'id' | 'date'>) => {
+  const addExpense = (expenseData: AddExpenseData) => {
      if (!currentUser) throw new Error("No user found");
     const newExpense: Expense = {
       id: `exp-${new Date().getTime()}`,
@@ -71,7 +82,17 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
         if (user) {
           memberIds.add(user.id);
         } else {
-          console.warn(`User with email ${email} not found.`);
+          // For now, we'll just add new ad-hoc users to the main user list for simplicity in this demo
+          const newId = `user-${new Date().getTime()}-${Math.random()}`;
+          const newUser: User = {
+            id: newId,
+            name: email.split('@')[0],
+            email: email,
+            avatar: `https://placehold.co/100x100?text=${email.charAt(0).toUpperCase()}`,
+            initials: email.charAt(0).toUpperCase(),
+          };
+          setUsers(prev => [...prev, newUser]);
+          memberIds.add(newId);
         }
       });
       
@@ -125,18 +146,23 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
     expensesToCalculate.forEach(expense => {
         const participantsInThisExpense = expense.splitWith.filter(p => allParticipants.includes(p));
-        const numParticipants = participantsInThisExpense.length;
-        if (numParticipants === 0) return;
-
-        const share = expense.amount / numParticipants;
+        if (participantsInThisExpense.length === 0) return;
 
         if(!userBalances[expense.paidById]) userBalances[expense.paidById] = 0;
         userBalances[expense.paidById] += expense.amount;
 
-        participantsInThisExpense.forEach(participantId => {
-            if(!userBalances[participantId]) userBalances[participantId] = 0;
-            userBalances[participantId] -= share;
-        });
+        if (expense.splitType === 'unequally' && expense.unequalSplits) {
+            expense.unequalSplits.forEach(split => {
+                if(!userBalances[split.participantId]) userBalances[split.participantId] = 0;
+                userBalances[split.participantId] -= split.amount;
+            });
+        } else {
+            const share = expense.amount / participantsInThisExpense.length;
+            participantsInThisExpense.forEach(participantId => {
+                if(!userBalances[participantId]) userBalances[participantId] = 0;
+                userBalances[participantId] -= share;
+            });
+        }
     });
     return userBalances;
   }, []);
@@ -202,8 +228,8 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
             const fromUser = findUserById(debt.from);
             const toUser = findUserById(debt.to);
             return {
-                from: fromUser || {id: debt.from, name: debt.from},
-                to: toUser || {id: debt.to, name: debt.to},
+                from: fromUser || {id: debt.from, name: debt.from, initials: debt.from.charAt(0).toUpperCase()},
+                to: toUser || {id: debt.to, name: debt.to, initials: debt.to.charAt(0).toUpperCase()},
                 amount: debt.amount
             }
         });

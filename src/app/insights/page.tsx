@@ -4,9 +4,13 @@
 import { Header } from "@/components/header";
 import { SpendingByCategoryChart } from "@/components/spending-by-category-chart";
 import { SpendingOverTimeChart } from "@/components/spending-over-time-chart";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Progress } from "@/components/ui/progress";
 import { useSettleSmart } from "@/context/settle-smart-context";
-import { Loader2, Users, ShoppingCart } from "lucide-react";
+import { formatCurrency } from "@/lib/utils";
+import { Loader2, Users, ShoppingCart, Target } from "lucide-react";
 
 
 export default function InsightsPage() {
@@ -45,8 +49,21 @@ export default function InsightsPage() {
                         <CardDescription>Set and track your monthly spending goals.</CardDescription>
                     </CardHeader>
                      <CardContent>
-                         <div className="flex h-full min-h-[200px] items-center justify-center text-center text-muted-foreground">
-                            <p>Coming soon!</p>
+                        <div className="space-y-6">
+                            <div className="flex flex-col gap-4">
+                               <div className="flex items-center gap-2">
+                                 <Target className="h-6 w-6 text-primary" />
+                                 <span className="font-semibold">Food & Drink</span>
+                               </div>
+                               <Progress value={75} className="h-3"/>
+                               <div className="flex justify-between items-center text-sm">
+                                  <span className="text-muted-foreground">Spent: {formatCurrency(375)}</span>
+                                  <span className="text-muted-foreground">Budget: {formatCurrency(500)}</span>
+                               </div>
+                            </div>
+                             <div className="flex items-center justify-center text-center text-muted-foreground p-4 border border-dashed rounded-lg">
+                                <p>Budgeting features are coming soon!</p>
+                            </div>
                         </div>
                     </CardContent>
                  </Card>
