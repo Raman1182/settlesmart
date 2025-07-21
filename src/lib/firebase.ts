@@ -1,5 +1,5 @@
 // Your web app's Firebase configuration
-import { setLogLevel } from "firebase/firestore";
+import { initializeApp, getApp, getApps } from "firebase/app";
 
 export const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -10,6 +10,6 @@ export const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-// IMPORTANT: This will enable verbose logging for Firestore
-// Check your browser's developer console for detailed output.
-setLogLevel('debug');
+const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+
+export { app };

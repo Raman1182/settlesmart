@@ -70,37 +70,31 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const [db, setDb] = useState<Firestore | null>(null);
 
   useEffect(() => {
-    console.log("DEBUG: SettleSmartProvider mounting. Initializing Firebase...");
     const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
     const authInstance = getAuth(app);
     const dbInstance = getFirestore(app);
 
     enableIndexedDbPersistence(dbInstance)
-      .then(() => console.log("DEBUG: Firestore persistence enabled."))
       .catch((err) => {
         if (err.code == 'failed-precondition') {
-            console.warn("DEBUG: Firestore persistence failed: Multiple tabs open.");
+            // Multiple tabs open, persistence can only be enabled in one tab at a time.
         } else if (err.code == 'unimplemented') {
-            console.warn("DEBUG: Firestore persistence failed: Browser does not support it.");
+            // The current browser does not support all of the
+            // features required to enable persistence
         }
     });
 
     setAuth(authInstance);
     setDb(dbInstance);
-    console.log("DEBUG: Firebase App, Auth, and DB initialized. Setting up auth state listener.");
 
     const unsubscribeAuth = onAuthStateChanged(authInstance, async (user) => {
-        console.log("DEBUG: onAuthStateChanged triggered.");
         if (user) {
-            console.log(`DEBUG: User found (UID: ${user.uid}). Fetching user document...`);
             const userRef = doc(dbInstance, "users", user.uid);
             const userSnap = await getDoc(userRef);
             if (userSnap.exists()) {
                 const userData = { id: user.uid, ...userSnap.data() } as User;
                 setCurrentUser(userData);
-                console.log("DEBUG: User document found. CurrentUser set:", userData);
             } else {
-                 console.log("DEBUG: User document not found. Creating new user record...");
                  const name = user.email!.split('@')[0] || 'New User';
                  const initials = name.charAt(0).toUpperCase();
                  const newUserRecord: User = {
@@ -112,25 +106,20 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
                 };
                 await setDoc(userRef, { email: newUserRecord.email, name: newUserRecord.name, avatar: newUserRecord.avatar, initials: initials });
                 setCurrentUser(newUserRecord);
-                console.log("DEBUG: New user record created and set:", newUserRecord);
             }
         } else {
             setCurrentUser(null);
-            console.log("DEBUG: No user found. CurrentUser set to null.");
         }
-        console.log("DEBUG: Auth state processing finished. Setting isAuthLoading to false.");
         setIsAuthLoading(false);
     });
 
     return () => {
-        console.log("DEBUG: SettleSmartProvider unmounting. Cleaning up auth listener.");
         unsubscribeAuth();
     };
   }, []);
 
   useEffect(() => {
     if (isAuthLoading || !db) {
-        console.log("DEBUG: Skipping data listeners: isAuthLoading is true or DB not initialized.");
         return;
     }
 
@@ -138,28 +127,22 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     let unsubGroups: () => void = () => {};
 
     if (currentUser) {
-        console.log("DEBUG: User is authenticated. Setting up user and group listeners...");
-        // Setup user-dependent listeners
         unsubUsers = onSnapshot(collection(db, "users"), (snapshot) => {
-            console.log(`DEBUG: Users listener fired. ${snapshot.docs.length} users found.`);
             const allUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
             setUsers(allUsers);
         }, (error) => {
-            console.error("DEBUG: Error in 'users' listener:", error);
+            console.error("Error in 'users' listener:", error);
         });
 
         const qGroups = query(collection(db, "groups"), where("members", "array-contains", currentUser.id));
         unsubGroups = onSnapshot(qGroups, (snapshot) => {
-            console.log(`DEBUG: Groups listener fired. ${snapshot.docs.length} groups found.`);
             const userGroups: Group[] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data()} as Group));
             setGroups(userGroups);
         }, (error) => {
-            console.error("DEBUG: Error in 'groups' listener:", error);
+            console.error("Error in 'groups' listener:", error);
         });
 
     } else {
-        console.log("DEBUG: User not authenticated. Clearing data.");
-        // Not logged in, clear all data
         setUsers([]);
         setGroups([]);
         setExpenses([]);
@@ -167,51 +150,45 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     }
 
     return () => {
-        console.log("DEBUG: Cleaning up user and group listeners.");
         unsubUsers();
         unsubGroups();
     };
   }, [currentUser, isAuthLoading, db]);
   
     useEffect(() => {
-        if (isAuthLoading || !db) {
-            console.log("DEBUG: Skipping expense/checklist listeners: isAuthLoading or DB not ready.");
+        if (isAuthLoading || !db || groups.length === 0) {
+            setExpenses([]);
+            setGroupChecklists({});
             return;
         }
         
         const groupIds = groups.map(g => g.id);
         if (groupIds.length === 0) {
-          console.log("DEBUG: No groups for the current user. Clearing expenses and checklists.");
           setExpenses([]);
           setGroupChecklists({});
           return;
         }
 
-        console.log(`DEBUG: Setting up listeners for expenses and checklists across ${groupIds.length} groups.`);
-
         const qExpenses = query(collection(db, "expenses"), where("groupId", "in", groupIds));
         const unsubscribeExpenses = onSnapshot(qExpenses, (expSnapshot) => {
-            console.log(`DEBUG: Expenses listener fired. ${expSnapshot.docs.length} expenses found.`);
             const groupExpenses = expSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), date: doc.data().date.toDate().toISOString() } as Expense));
             setExpenses(groupExpenses.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
         }, (error) => {
-            console.error("DEBUG: Error in 'expenses' listener:", error);
+            console.error("Error in 'expenses' listener:", error);
         });
 
         const qChecklists = query(collection(db, "checklists"), where("groupId", "in", groupIds));
         const unsubscribeChecklists = onSnapshot(qChecklists, (checklistSnapshot) => {
-            console.log(`DEBUG: Checklists listener fired. ${checklistSnapshot.docs.length} checklists found.`);
             const checklistsData: {[groupId: string]: ChecklistItem[]} = {};
             checklistSnapshot.docs.forEach(doc => {
                 checklistsData[doc.id] = doc.data().items;
             });
             setGroupChecklists(checklistsData);
         }, (error) => {
-            console.error("DEBUG: Error in 'checklists' listener:", error);
+            console.error("Error in 'checklists' listener:", error);
         });
 
         return () => {
-            console.log("DEBUG: Cleaning up expense and checklist listeners.");
             unsubscribeExpenses();
             unsubscribeChecklists();
         }
@@ -518,3 +495,4 @@ export const useSettleSmart = (): SettleSmartContextType => {
     
 
     
+
