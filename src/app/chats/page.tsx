@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useMemo, useEffect } from "react";
@@ -22,8 +23,8 @@ export default function ChatsPage() {
 
     const sortedChats = useMemo(() => {
         return chats.sort((a, b) => {
-            if (!a.lastMessage) return 1;
-            if (!b.lastMessage) return -1;
+            if (!a.lastMessage?.timestamp) return 1;
+            if (!b.lastMessage?.timestamp) return -1;
             return new Date(b.lastMessage.timestamp).getTime() - new Date(a.lastMessage.timestamp).getTime();
         });
     }, [chats]);
@@ -49,6 +50,7 @@ export default function ChatsPage() {
                         <div className="space-y-2">
                             {sortedChats.map(chat => {
                                 const friend = chat.participants.find(p => p.id !== currentUser.id);
+                                const unreadCount = chat.unreadCount?.[currentUser.id] || 0;
                                 if (!friend) return null;
 
                                 return (
@@ -61,18 +63,18 @@ export default function ChatsPage() {
                                             <AvatarImage src={friend.avatar} alt={friend.name} />
                                             <AvatarFallback>{friend.initials}</AvatarFallback>
                                         </Avatar>
-                                        <div className="flex-1">
+                                        <div className="flex-1 overflow-hidden">
                                             <p className="font-semibold">{friend.name}</p>
                                             <p className="text-sm text-muted-foreground truncate max-w-xs">
                                                 {chat.lastMessage?.text || "No messages yet."}
                                             </p>
                                         </div>
                                         <div className="flex flex-col items-end gap-1 text-xs text-muted-foreground">
-                                             {chat.lastMessage && (
+                                             {chat.lastMessage?.timestamp && (
                                                 <span>{formatDistanceToNow(new Date(chat.lastMessage.timestamp), { addSuffix: true })}</span>
                                              )}
-                                             {chat.unreadCount > 0 && (
-                                                <Badge variant="destructive">{chat.unreadCount}</Badge>
+                                             {unreadCount > 0 && (
+                                                <Badge variant="destructive" className="h-5 w-5 flex items-center justify-center">{unreadCount}</Badge>
                                              )}
                                         </div>
                                     </div>

@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useRef, useTransition, useMemo } from "react";
@@ -70,7 +71,7 @@ function ChatSettleUp({ friendId }: { friendId: string }) {
                     <p className="font-bold">
                         {isSettled && "You are all settled up!"}
                         {friendOwes && `${friend.name} owes you ${formatCurrency(netBalance)}`}
-                        {userOwes && `You owe ${friend.name} ${formatCurrency(Math.abs(netBalance))}`}
+                        {userOwes && `You owe ${friend.name} ${formatCurrency(Math.abs(userOwes))}`}
                     </p>
                     <p className="text-xs text-muted-foreground">Across all your 1-on-1 expenses.</p>
                 </div>
@@ -215,8 +216,8 @@ export default function ChatPage() {
                     >
                         {!isCurrentUser && (
                              <Avatar className={cn("w-8 h-8", !showAvatar && 'invisible')}>
-                                <AvatarImage src={sender.avatar} alt={sender.name} />
-                                <AvatarFallback>{sender.initials}</AvatarFallback>
+                                <AvatarImage src={sender?.avatar} alt={sender?.name} />
+                                <AvatarFallback>{sender?.initials}</AvatarFallback>
                             </Avatar>
                         )}
                          <div className="flex flex-col gap-1 max-w-sm md:max-w-md">
@@ -231,7 +232,7 @@ export default function ChatPage() {
                                 <p className="whitespace-pre-wrap">{message.text}</p>
                             </div>
                             <span className={cn("text-xs text-muted-foreground", isCurrentUser ? 'text-right' : 'text-left')}>
-                                {format(new Date(message.timestamp), "h:mm a")}
+                                {message.timestamp ? format(new Date(message.timestamp), "h:mm a") : "sending..."}
                             </span>
                         </div>
                         {isCurrentUser && (

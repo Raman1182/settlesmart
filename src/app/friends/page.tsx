@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useMemo, useState, useTransition, useEffect } from "react";
@@ -146,7 +147,7 @@ export default function FriendsPage() {
                     <CardContent>
                       <div className="space-y-4">
                         {friends.map(friend => {
-                          const unreadCount = chats.find(c => c.id.includes(friend.id))?.unreadCount || 0;
+                           const unreadCount = chats.find(c => c.id.includes(friend.id))?.unreadCount?.[currentUser.id] || 0;
                           return (
                           <div key={friend.id} className="flex items-center gap-4 p-2 rounded-lg hover:bg-muted/50">
                               <Avatar className="h-10 w-10">
@@ -160,7 +161,7 @@ export default function FriendsPage() {
                               <Button variant="ghost" size="icon" onClick={() => router.push(`/chat/${friend.id}`)} disabled={isProcessing} className="relative">
                                 <MessageSquare className="h-4 w-4" />
                                 {unreadCount > 0 && (
-                                    <Badge variant="destructive" className="absolute -top-1 -right-1 h-4 w-4 p-0 flex items-center justify-center text-xs">{unreadCount}</Badge>
+                                    <Badge variant="destructive" className="absolute -top-1 -right-1 h-5 w-5 p-0 flex items-center justify-center text-xs">{unreadCount}</Badge>
                                 )}
                               </Button>
                               <Button variant="ghost" size="icon" onClick={() => handleRemoveFriend(friend.id)} disabled={isProcessing}>

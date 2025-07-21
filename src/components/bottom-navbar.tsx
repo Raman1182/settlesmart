@@ -3,7 +3,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Users, Plus, MessageSquare, LineChart, Bell } from "lucide-react";
+import { Home, Users, Plus, MessageSquare, Bell } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AddExpenseSheet } from "./add-expense-sheet";
 import { Button } from "./ui/button";
@@ -16,8 +16,9 @@ export function BottomNavbar() {
   const { chats, friendships, currentUser } = useSettleSmart();
 
   const totalUnreadCount = useMemo(() => {
-    return chats.reduce((acc, chat) => acc + chat.unreadCount, 0);
-  }, [chats]);
+    if (!currentUser) return 0;
+    return chats.reduce((acc, chat) => acc + (chat.unreadCount?.[currentUser.id] || 0), 0);
+  }, [chats, currentUser]);
   
   const friendRequestCount = useMemo(() => {
     if(!currentUser) return 0;
@@ -58,7 +59,7 @@ export function BottomNavbar() {
                 href={item.href}
                 className={cn(
                 "inline-flex flex-col items-center justify-center px-5 hover:bg-muted/50 group relative",
-                 (pathname === item.href || (item.href === '/friends' && pathname.startsWith('/friends')))
+                 (pathname === item.href || (item.href === '/friends' && pathname.startsWith('/friends')) || (item.href === '/chats' && pathname.startsWith('/chats')))
                   ? "text-primary" 
                   : "text-muted-foreground"
                 )}
@@ -66,7 +67,7 @@ export function BottomNavbar() {
                 <item.icon className="w-6 h-6 mb-1" />
                 <span className="text-xs">{item.label}</span>
                  {item.notificationCount && item.notificationCount > 0 && (
-                    <Badge variant="destructive" className="absolute top-2 right-4 h-4 w-4 p-0 flex items-center justify-center text-xs">
+                    <Badge variant="destructive" className="absolute top-2 right-4 h-5 w-5 p-0 flex items-center justify-center text-xs">
                         {item.notificationCount}
                     </Badge>
                 )}

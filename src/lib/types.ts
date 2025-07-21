@@ -68,7 +68,8 @@ export interface Message {
 
 export interface Chat {
     id: string;
+    participantIds: string[];
     participants: User[];
     lastMessage: Message | null;
-    unreadCount: number;
+    unreadCount: { [userId: string]: number };
 }
