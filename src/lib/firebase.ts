@@ -17,6 +17,7 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 const auth = getAuth(app);
-const db = getFirestore(app);
+// Explicitly specify the database ID to prevent potential issues with listener endpoints.
+const db = getFirestore(app, '(default)');
 
 export { app, auth, db };
