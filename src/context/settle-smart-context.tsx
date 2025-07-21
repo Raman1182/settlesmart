@@ -135,12 +135,13 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
   useEffect(() => {
     if (isAuthLoading || !db || !currentUser) {
-        setUsers([]);
-        setGroups([]);
-        setExpenses([]);
-        setFriendships([]);
-        setChats([]);
-        setGroupChecklists({});
+        // Clear data when logging out or loading
+        if (users.length > 0) setUsers([]);
+        if (groups.length > 0) setGroups([]);
+        if (expenses.length > 0) setExpenses([]);
+        if (friendships.length > 0) setFriendships([]);
+        if (chats.length > 0) setChats([]);
+        if (Object.keys(groupChecklists).length > 0) setGroupChecklists({});
         return;
     }
 
