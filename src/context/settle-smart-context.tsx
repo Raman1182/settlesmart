@@ -17,6 +17,13 @@ interface SettleSmartContextType {
     totalOwedByUser: number;
     settlements: { from: User; to: User; amount: number }[];
   };
+  getGroupBalances: (groupId: string) => { 
+      total: number, 
+      settled: number, 
+      remaining: number, 
+      progress: number,
+      memberBalances: { [key: string]: number } 
+  };
   findUserById: (id: string) => User | undefined;
   createGroup: (name: string, memberEmails: string[]) => Promise<void>;
   updateGroupMembers: (groupId: string, memberEmailsToAdd: string[], memberIdsToRemove: string[]) => Promise<void>;
@@ -115,19 +122,13 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
      }));
   }
 
-  
-  const balances = useMemo(() => {
-    if (!currentUser || !users.length) {
-        return { totalOwedToUser: 0, totalOwedByUser: 0, settlements: [] };
-    }
+  const calculateSettlements = useCallback((expensesToCalculate: Expense[], groupMembers: string[]) => {
     const userBalances: { [key: string]: number } = {};
+    groupMembers.forEach(id => userBalances[id] = 0);
 
-    users.forEach(user => {
-        userBalances[user.id] = 0;
-    });
-
-    expenses.forEach(expense => {
-        const numParticipants = expense.splitWith.length;
+    expensesToCalculate.forEach(expense => {
+        const participants = expense.splitWith.filter(pId => groupMembers.includes(pId));
+        const numParticipants = participants.length;
         if (numParticipants === 0) return;
 
         const share = expense.amount / numParticipants;
@@ -135,11 +136,37 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
         if(!userBalances[expense.paidById]) userBalances[expense.paidById] = 0;
         userBalances[expense.paidById] += expense.amount;
 
-        expense.splitWith.forEach(participantId => {
+        participants.forEach(participantId => {
             if(!userBalances[participantId]) userBalances[participantId] = 0;
             userBalances[participantId] -= share;
         });
     });
+    return userBalances;
+  }, []);
+
+  const getGroupBalances = useCallback((groupId: string) => {
+      const group = groups.find(g => g.id === groupId);
+      if (!group) return { total: 0, settled: 0, remaining: 0, progress: 0, memberBalances: {} };
+      
+      const groupExpenses = expenses.filter(e => e.groupId === groupId);
+      const total = groupExpenses.reduce((sum, e) => sum + e.amount, 0);
+
+      const memberBalances = calculateSettlements(groupExpenses, group.members);
+      
+      const totalPositive = Object.values(memberBalances).filter(v => v > 0).reduce((s, v) => s + v, 0);
+      const remaining = totalPositive;
+      const settled = total > 0 ? total - remaining : 0;
+      const progress = total > 0 ? (settled / total) * 100 : 100;
+
+      return { total, settled, remaining, progress, memberBalances };
+
+  }, [groups, expenses, calculateSettlements]);
+  
+  const balances = useMemo(() => {
+    if (!currentUser || !users.length) {
+        return { totalOwedToUser: 0, totalOwedByUser: 0, settlements: [] };
+    }
+    const userBalances = calculateSettlements(expenses, users.map(u=>u.id));
 
     const settlements: { from: string, to: string, amount: number }[] = [];
     const payers = Object.keys(userBalances).filter(id => userBalances[id] > 0.01);
@@ -178,7 +205,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
       totalOwedByUser: finalSettlements.filter(s => s.from?.id === currentUser?.id).reduce((sum, s) => sum + s.amount, 0),
       settlements: finalSettlements
     };
-  }, [expenses, users, currentUser, findUserById]);
+  }, [expenses, users, currentUser, findUserById, calculateSettlements]);
 
 
   const value = {
@@ -189,6 +216,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     expenses,
     addExpense,
     balances,
+    getGroupBalances,
     findUserById,
     createGroup,
     updateGroupMembers,

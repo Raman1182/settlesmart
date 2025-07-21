@@ -8,10 +8,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDistanceToNow } from "date-fns";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Plus } from "lucide-react";
+import { ArrowRight, Plus, Users } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import { formatCurrency } from "@/lib/utils";
 
 export default function GroupsPage() {
-  const { groups, currentUser } = useSettleSmart();
+  const { groups, getGroupBalances, findUserById } = useSettleSmart();
   const router = useRouter();
 
   return (
@@ -19,33 +21,52 @@ export default function GroupsPage() {
       <Header pageTitle="Groups" />
       <main className="flex-1 p-4 sm:p-6 md:p-8">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {groups.map((group) => (
-            <Card
-              key={group.id}
-              className="flex flex-col cursor-pointer transition-all hover:scale-[1.02] hover:shadow-primary/20"
-              onClick={() => router.push(`/group/${group.id}`)}
-            >
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <span>{group.name}</span>
-                </CardTitle>
-                <CardDescription>
-                  {group.members.length} member{group.members.length > 1 ? 's' : ''}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="flex-1">
-                <p className="text-sm text-muted-foreground">
-                  Created {formatDistanceToNow(new Date(group.createdAt), { addSuffix: true })}
-                </p>
-              </CardContent>
-              <CardFooter>
-                 <Button variant="link" className="p-0 h-auto text-primary">
-                    View Details
-                    <ArrowRight className="ml-2 h-4 w-4" />
-                </Button>
-              </CardFooter>
-            </Card>
-          ))}
+          {groups.map((group) => {
+             const groupBalance = getGroupBalances(group.id);
+             const createdBy = findUserById(group.createdBy || "");
+
+            return (
+              <Card
+                key={group.id}
+                className="flex flex-col cursor-pointer transition-all hover:scale-[1.02] hover:shadow-primary/20"
+                onClick={() => router.push(`/group/${group.id}`)}
+              >
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-3">
+                    <div className="p-2 bg-muted rounded-md">
+                        <Users className="h-5 w-5 text-primary" />
+                    </div>
+                    <span>{group.name}</span>
+                  </CardTitle>
+                  <CardDescription>
+                    {group.members.length} member{group.members.length > 1 ? 's' : ''} &bull; Created by {createdBy?.name || '...'}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="flex-1 space-y-4">
+                    <div>
+                        <div className="flex justify-between items-center mb-1">
+                            <span className="text-sm font-medium text-muted-foreground">Total Balance</span>
+                            <span className="font-bold text-lg">{formatCurrency(groupBalance.total)}</span>
+                        </div>
+                        <Progress value={groupBalance.progress} className="h-1.5" />
+                        <div className="flex justify-between items-center mt-1 text-xs text-muted-foreground">
+                            <span>Settled</span>
+                            <span>{groupBalance.progress.toFixed(0)}%</span>
+                        </div>
+                    </div>
+                </CardContent>
+                <CardFooter className="flex justify-between items-center text-xs text-muted-foreground">
+                   <span>
+                        Last activity: {formatDistanceToNow(new Date(group.createdAt), { addSuffix: true })}
+                    </span>
+                   <Button variant="link" className="p-0 h-auto text-primary text-xs">
+                      View
+                      <ArrowRight className="ml-1 h-3 w-3" />
+                  </Button>
+                </CardFooter>
+              </Card>
+            )
+          })}
         </div>
 
         {groups.length === 0 && (
