@@ -10,29 +10,73 @@ import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/utils";
 import { ArrowLeftRight, Shield } from "lucide-react";
 
+interface FriendWithBalance {
+    id: string;
+    name: string;
+    email?: string;
+    avatar?: string;
+    initials: string;
+    balance: number;
+}
+
+
 export default function FriendsPage() {
   const { users, currentUser, balances } = useSettleSmart();
 
   const friendsWithBalances = useMemo(() => {
-    const friendBalances: { [key: string]: number } = {};
+    const friendMap: Map<string, FriendWithBalance> = new Map();
 
+    // Initialize map with all known users first to get their full details
+    users.forEach(u => {
+        if (u.id !== currentUser.id) {
+            friendMap.set(u.id, {
+                id: u.id,
+                name: u.name,
+                email: u.email,
+                avatar: u.avatar,
+                initials: u.initials,
+                balance: 0
+            });
+        }
+    });
+    
     balances.settlements.forEach(s => {
+      let friend: FriendWithBalance | undefined;
+      let friendId: string | undefined;
+
+      // Determine who the friend is in this settlement
       if (s.from.id === currentUser.id) {
-        if (!friendBalances[s.to.id]) friendBalances[s.to.id] = 0;
-        friendBalances[s.to.id] -= s.amount;
+        friendId = s.to.id;
+      } else if (s.to.id === currentUser.id) {
+        friendId = s.from.id;
       }
-      if (s.to.id === currentUser.id) {
-        if (!friendBalances[s.from.id]) friendBalances[s.from.id] = 0;
-        friendBalances[s.from.id] += s.amount;
+
+      if (friendId) {
+        friend = friendMap.get(friendId);
+
+        // If friend doesn't exist (ad-hoc user), create a record for them
+        if (!friend) {
+            const participant = s.from.id === friendId ? s.from : s.to;
+            friend = {
+                id: participant.id,
+                name: participant.name,
+                initials: participant.name.charAt(0).toUpperCase(),
+                balance: 0,
+            };
+            friendMap.set(friendId, friend);
+        }
+
+        // Update balance
+        if (s.from.id === currentUser.id) {
+          friend.balance -= s.amount; // You owe them
+        } else {
+          friend.balance += s.amount; // They owe you
+        }
       }
     });
 
-    return users
-      .filter(u => u.id !== currentUser.id)
-      .map(u => ({
-        ...u,
-        balance: friendBalances[u.id] || 0
-      }))
+    return Array.from(friendMap.values())
+      .filter(f => f.balance !== 0) // Only show friends with an outstanding balance
       .sort((a, b) => Math.abs(b.balance) - Math.abs(a.balance));
 
   }, [users, currentUser, balances]);
@@ -51,7 +95,7 @@ export default function FriendsPage() {
                 </Avatar>
                 <div>
                   <CardTitle>{friend.name}</CardTitle>
-                  <CardDescription>{friend.email}</CardDescription>
+                  <CardDescription>{friend.email || 'Ad-hoc friend'}</CardDescription>
                 </div>
               </CardHeader>
               <CardContent className="flex-1 space-y-4 text-center">
@@ -76,8 +120,8 @@ export default function FriendsPage() {
           ))}
            {friendsWithBalances.length === 0 && (
                 <div className="col-span-full flex flex-col items-center justify-center text-center text-muted-foreground h-full rounded-lg border-2 border-dashed border-muted/50 py-12">
-                    <h3 className="text-xl font-bold mb-2">No friends yet</h3>
-                    <p className="mb-4">Add expenses with people to see them here.</p>
+                    <h3 className="text-xl font-bold mb-2">All square!</h3>
+                    <p className="mb-4">You have no outstanding balances with any friends.</p>
                 </div>
             )}
         </div>
