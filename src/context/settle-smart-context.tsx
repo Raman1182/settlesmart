@@ -109,12 +109,12 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     };
   }, []);
 
+  // Effect for groups, friendships, users
   useEffect(() => {
     if (!currentUser?.id) {
         setGroups([]);
         setExpenses([]);
         setFriendships([]);
-        setMessages([]);
         setGroupChecklists({});
         return;
     };
@@ -126,7 +126,6 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
         const userGroups: Group[] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data()} as Group));
         setGroups(userGroups);
 
-        // Fetch expenses and checklists for these groups
         if (userGroups.length > 0) {
             const groupIds = userGroups.map(g => g.id);
             const qExpenses = query(collection(db, "expenses"), where("groupId", "in", groupIds));
@@ -161,27 +160,6 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
             userFriendships.push({ id: doc.id, ...doc.data()} as Friendship);
         });
         setFriendships(userFriendships);
-        
-        const acceptedFriendships = userFriendships.filter(f => f.status === 'accepted');
-        const chatIds = acceptedFriendships.map(f => [f.userIds[0], f.userIds[1]].sort().join('_'));
-
-        if (chatIds.length > 0) {
-            const qMessages = query(collection(db, "messages"), where("chatId", "in", chatIds), orderBy("createdAt"));
-            const unsubscribeMessages = onSnapshot(qMessages, (msgSnapshot) => {
-                const receivedMessages: Message[] = msgSnapshot.docs.map(doc => {
-                    const data = doc.data();
-                    return {
-                        id: doc.id,
-                        ...data,
-                        createdAt: data.createdAt?.toDate().toISOString() || new Date().toISOString()
-                    } as Message
-                });
-                setMessages(receivedMessages);
-            });
-            return () => unsubscribeMessages();
-        } else {
-            setMessages([]);
-        }
     });
 
     const unsubscribeUsers = onSnapshot(collection(db, "users"), (snapshot) => {
@@ -195,6 +173,41 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
         if (unsubscribeUsers) unsubscribeUsers();
     };
   }, [currentUser?.id]);
+
+  // Decoupled effect for messages
+  useEffect(() => {
+      if (!currentUser?.id) {
+          setMessages([]);
+          return;
+      }
+  
+      const acceptedFriendships = friendships.filter(f => f.status === 'accepted');
+      if (acceptedFriendships.length === 0) {
+          setMessages([]);
+          return;
+      }
+      
+      const chatIds = acceptedFriendships.map(f => [f.userIds[0], f.userIds[1]].sort().join('_'));
+      
+      const qMessages = query(collection(db, "messages"), where("chatId", "in", chatIds), orderBy("createdAt"));
+      const unsubscribeMessages = onSnapshot(qMessages, (msgSnapshot) => {
+          const receivedMessages: Message[] = msgSnapshot.docs.map(doc => {
+              const data = doc.data();
+              return {
+                  id: doc.id,
+                  ...data,
+                  createdAt: data.createdAt?.toDate().toISOString() || new Date().toISOString()
+              } as Message
+          });
+          setMessages(receivedMessages);
+      }, (error) => {
+          console.error("Message listener error:", error);
+      });
+  
+      return () => {
+          unsubscribeMessages();
+      };
+  }, [currentUser?.id, friendships]);
 
 
   const signUp = async (email: string, pass: string) => {
@@ -431,7 +444,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     return userBalances;
   }, []);
   
-  const getAllParticipantsInExpenses = useMemo(() => {
+    const getAllParticipantsInExpenses = useMemo(() => {
     const all = new Set<string>();
     expenses.forEach(e => {
         e.splitWith.forEach(p => all.add(p));
@@ -572,5 +585,3 @@ export const useSettleSmart = (): SettleSmartContextType => {
   }
   return context;
 };
-
-    
