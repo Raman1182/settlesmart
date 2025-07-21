@@ -85,68 +85,66 @@ export default function FriendsPage() {
   }, [users, currentUser, balances]);
 
   return (
-    <>
-    <div className="flex flex-col min-h-screen w-full">
-      <Header pageTitle="Friends" />
-      <main className="flex-1 p-4 sm:p-6 md:p-8">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {friendsWithBalances.map(friend => (
-            <Card key={friend.id} className="flex flex-col">
-              <CardHeader className="flex flex-row items-center gap-4">
-                <Avatar className="h-12 w-12">
-                  <AvatarImage src={friend.avatar} alt={friend.name} />
-                  <AvatarFallback>{friend.initials}</AvatarFallback>
-                </Avatar>
-                <div>
-                  <CardTitle>{friend.name}</CardTitle>
-                  <CardDescription>{friend.email || 'Ad-hoc friend'}</CardDescription>
-                </div>
-              </CardHeader>
-              <CardContent className="flex-1 space-y-4 text-center">
-                 <div className={`text-2xl font-bold ${friend.balance > 0 ? 'text-green-500' : friend.balance < 0 ? 'text-red-500' : 'text-muted-foreground'}`}>
-                   {formatCurrency(Math.abs(friend.balance))}
-                 </div>
-                 <div className="text-sm text-muted-foreground">
-                    {friend.balance > 0 ? `owes you` : friend.balance < 0 ? `you owe` : 'Settled up'}
-                 </div>
-              </CardContent>
-              <CardFooter className="flex flex-col gap-2">
-                 <AlertDialogTrigger asChild>
-                    <Button className="w-full" disabled={friend.balance === 0} onClick={() => setSettleFriend(friend)}>
-                        <ArrowLeftRight className="mr-2 h-4 w-4" />
-                        Settle Up
-                    </Button>
-                 </AlertDialogTrigger>
-                <div className="flex items-center text-xs text-muted-foreground gap-1 pt-2">
-                    <Shield className="h-4 w-4 text-primary/50" />
-                    <span>Trust Score: Coming Soon</span>
-                </div>
-              </CardFooter>
-            </Card>
-          ))}
-           {friendsWithBalances.length === 0 && (
-                <div className="col-span-full flex flex-col items-center justify-center text-center text-muted-foreground h-full rounded-lg border-2 border-dashed border-muted/50 py-12">
-                    <h3 className="text-xl font-bold mb-2">All square!</h3>
-                    <p className="mb-4">You have no outstanding balances with any friends.</p>
-                </div>
-            )}
-        </div>
-      </main>
-    </div>
     <AlertDialog>
-        <AlertDialogContent>
-            <AlertDialogHeader>
-            <AlertDialogTitle>Settle with {settleFriend?.name}?</AlertDialogTitle>
-            <AlertDialogDescription>
-                This will mark your balance of {formatCurrency(Math.abs(settleFriend?.balance || 0))} with {settleFriend?.name} as settled. This action assumes an offline payment was made.
-            </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction>Confirm Settlement</AlertDialogAction>
-            </AlertDialogFooter>
-        </AlertDialogContent>
+      <div className="flex flex-col min-h-screen w-full">
+        <Header pageTitle="Friends" />
+        <main className="flex-1 p-4 sm:p-6 md:p-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {friendsWithBalances.map(friend => (
+              <Card key={friend.id} className="flex flex-col">
+                <CardHeader className="flex flex-row items-center gap-4">
+                  <Avatar className="h-12 w-12">
+                    <AvatarImage src={friend.avatar} alt={friend.name} />
+                    <AvatarFallback>{friend.initials}</AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <CardTitle>{friend.name}</CardTitle>
+                    <CardDescription>{friend.email || 'Ad-hoc friend'}</CardDescription>
+                  </div>
+                </CardHeader>
+                <CardContent className="flex-1 space-y-4 text-center">
+                   <div className={`text-2xl font-bold ${friend.balance > 0 ? 'text-green-500' : friend.balance < 0 ? 'text-red-500' : 'text-muted-foreground'}`}>
+                     {formatCurrency(Math.abs(friend.balance))}
+                   </div>
+                   <div className="text-sm text-muted-foreground">
+                      {friend.balance > 0 ? `owes you` : friend.balance < 0 ? `you owe` : 'Settled up'}
+                   </div>
+                </CardContent>
+                <CardFooter className="flex flex-col gap-2">
+                   <AlertDialogTrigger asChild>
+                      <Button className="w-full" disabled={friend.balance === 0} onClick={() => setSettleFriend(friend)}>
+                          <ArrowLeftRight className="mr-2 h-4 w-4" />
+                          Settle Up
+                      </Button>
+                   </AlertDialogTrigger>
+                  <div className="flex items-center text-xs text-muted-foreground gap-1 pt-2">
+                      <Shield className="h-4 w-4 text-primary/50" />
+                      <span>Trust Score: Coming Soon</span>
+                  </div>
+                </CardFooter>
+              </Card>
+            ))}
+             {friendsWithBalances.length === 0 && (
+                  <div className="col-span-full flex flex-col items-center justify-center text-center text-muted-foreground h-full rounded-lg border-2 border-dashed border-muted/50 py-12">
+                      <h3 className="text-xl font-bold mb-2">All square!</h3>
+                      <p className="mb-4">You have no outstanding balances with any friends.</p>
+                  </div>
+              )}
+          </div>
+        </main>
+      </div>
+      <AlertDialogContent>
+          <AlertDialogHeader>
+          <AlertDialogTitle>Settle with {settleFriend?.name}?</AlertDialogTitle>
+          <AlertDialogDescription>
+              This will mark your balance of {formatCurrency(Math.abs(settleFriend?.balance || 0))} with {settleFriend?.name} as settled. This action assumes an offline payment was made.
+          </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction>Confirm Settlement</AlertDialogAction>
+          </AlertDialogFooter>
+      </AlertDialogContent>
     </AlertDialog>
-    </>
   );
 }
