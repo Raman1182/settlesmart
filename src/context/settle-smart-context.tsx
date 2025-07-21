@@ -19,7 +19,7 @@ interface AddExpenseData {
   unequalSplits?: UnequalSplit[];
   groupId: string | null;
   category: string;
-  isRecurring: boolean; // Keep this for form simplicity, convert to `recurring` on save
+  isRecurring: boolean;
 }
 
 interface SettleSmartContextType {
@@ -156,7 +156,6 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
         return;
     }
     
-    // Fetch all expenses where the current user is involved, either as payer or participant
     const qExpenses = query(collection(db, "expenses"), where("splitWith", "array-contains", currentUser.id));
     const unsubExpenses = onSnapshot(qExpenses, (snapshot) => {
         const userExpenses = snapshot.docs.map(doc => {
@@ -176,7 +175,6 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
         const userGroups: Group[] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data()} as Group));
         setGroups(userGroups);
         
-        // Fetch checklists for these groups
         if (userGroups.length > 0) {
             const groupIds = userGroups.map(g => g.id);
             const qChecklists = query(collection(db, "checklists"), where("groupId", "in", groupIds));
@@ -287,10 +285,8 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
       settledAt: null,
     });
 
-     // Automatically create friendships with ad-hoc users
      for (const pId of expenseData.splitWith) {
         const user = findUserById(pId);
-        // If user is ad-hoc (no registered email) and not current user
         if (user && user.email.endsWith('@adhoc.settlesmart.app') && pId !== currentUser.id) {
            const friendshipQuery = query(
               collection(db, "friendships"),
@@ -301,7 +297,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
                  await addDoc(collection(db, "friendships"), {
                     requesterId: currentUser.id,
                     receiverId: pId,
-                    status: 'accepted', // Auto-accept friendship with ad-hoc users
+                    status: 'accepted',
                     participantIds: [currentUser.id, pId],
                     createdAt: serverTimestamp()
                 });
@@ -383,7 +379,6 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     if (!currentUser || !db) throw new Error("Not authenticated or DB not initialized");
     const batch = writeBatch(db);
     
-    // Find all unsettled, 1-on-1 expenses between the two users
     const expensesToSettle = expenses.filter(e => 
         e.groupId === null &&
         e.status === 'unsettled' &&
@@ -422,7 +417,6 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     await batch.commit();
   };
   
-  // Friendship and Messaging Logic
   const sendFriendRequest = async (receiverId: string) => {
     if (!currentUser || !db) throw new Error("Not authenticated");
     const friendshipQuery = query(
@@ -455,7 +449,6 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     const batch = writeBatch(db);
     batch.update(friendshipRef, { status: 'accepted' });
 
-    // Create a new chat document
     const chatId = getChatId(currentUser.id, friendId);
     const chatRef = doc(db, "chats", chatId);
     batch.set(chatRef, {
@@ -531,7 +524,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     
     const batch = writeBatch(db);
     
-    const newMessageRef = doc(messagesColRef); // auto-generate ID
+    const newMessageRef = doc(messagesColRef);
     batch.set(newMessageRef, { ...newMessage, timestamp: serverTimestamp() });
     
     const unreadCountKey = `unreadCount.${friendId}`;
@@ -546,7 +539,6 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
         [unreadCountKey]: increment(1)
     };
 
-    // Use set with merge to create the doc if it doesn't exist
     batch.set(chatRef, chatUpdatePayload, { merge: true });
 
     await batch.commit();
@@ -556,7 +548,6 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
       if (!currentUser || !db) return;
       const chatRef = doc(db, "chats", chatId);
       const unreadCountKey = `unreadCount.${currentUser.id}`;
-      // Use set with merge to avoid errors if doc doesn't exist yet
       await setDoc(chatRef, { [unreadCountKey]: 0 }, { merge: true });
   }
 
@@ -677,9 +668,12 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
             }
         });
 
+    const totalOwedToUser = finalSettlements.filter(s => s.to?.id === currentUser?.id).reduce((sum, s) => sum + s.amount, 0);
+    const totalOwedByUser = finalSettlements.filter(s => s.from?.id === currentUser?.id).reduce((sum, s) => sum + s.amount, 0);
+
     return {
-      totalOwedToUser: finalSettlements.filter(s => s.to?.id === currentUser?.id).reduce((sum, s) => sum + s.amount, 0),
-      totalOwedByUser: finalSettlements.filter(s => s.from?.id === currentUser?.id).reduce((sum, s) => sum + s.amount, 0),
+      totalOwedToUser,
+      totalOwedByUser,
       settlements: finalSettlements
     };
   }, [expenses, currentUser, users, getAllParticipantsInExpenses, calculateSettlements, simplifyDebts, findUserById]);
@@ -688,11 +682,11 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
       let score = 70;
 
       const userExpenses = expenses.filter(e => e.splitWith.includes(userId));
-      if (userExpenses.length < 3) return 70; // Not enough data
+      if (userExpenses.length < 3) return 70;
 
-      // Debts owed by user
-      const userDebts = userExpenses.filter(e => e.paidById !== userId);
-      const settledDebts = userDebts.filter(e => e.status === 'settled' && e.settledAt);
+      // 1. Analyze repayment speed for debts owed by the user
+      const debtsOwedByUser = userExpenses.filter(e => e.paidById !== userId && e.splitWith.includes(userId));
+      const settledDebts = debtsOwedByUser.filter(e => e.status === 'settled' && e.settledAt);
       
       if (settledDebts.length > 0) {
         const totalRepayTime = settledDebts.reduce((sum, e) => {
@@ -700,25 +694,24 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
         }, 0);
         const avgRepayDays = totalRepayTime / settledDebts.length;
         
-        // Reward quick repayments
-        if (avgRepayDays <= 1) score += 15;
+        if (avgRepayDays <= 2) score += 15;
         else if (avgRepayDays <= 7) score += 5;
-        else if (avgRepayDays > 30) score -= 10;
-        else if (avgRepayDays > 14) score -= 5;
+        else if (avgRepayDays > 30) score -= 20;
+        else if (avgRepayDays > 14) score -= 10;
       }
 
-      // Lending history
-      const userLent = userExpenses.filter(e => e.paidById === userId);
-      const totalLentAmount = userLent.reduce((sum, e) => sum + e.amount, 0);
-      score += Math.min(10, totalLentAmount / 500); // Bonus for being a lender
+      // 2. Analyze lending history
+      const userLentExpenses = expenses.filter(e => e.paidById === userId);
+      const totalLentAmount = userLentExpenses.reduce((sum, e) => sum + e.amount, 0);
+      score += Math.min(15, totalLentAmount / 1000); // Bonus for total amount lent, capped at +15
 
-      // Current outstanding debt
+      // 3. Analyze current outstanding debt
       const allInvolvedUserIds = [...new Set([...users.map(u => u.id), ...getAllParticipantsInExpenses])];
       const allBalances = calculateSettlements(expenses, allInvolvedUserIds);
       const userBalance = allBalances[userId] || 0;
       
       if (userBalance < 0) { // User owes money
-          score -= Math.min(25, Math.abs(userBalance) / 100);
+          score -= Math.min(30, Math.abs(userBalance) / 50); // Penalty for outstanding debt, capped at -30
       }
 
       return Math.max(0, Math.min(100, Math.round(score)));
