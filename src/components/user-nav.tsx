@@ -18,9 +18,17 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useSettleSmart } from "@/context/settle-smart-context";
 import { LogOut, Settings, User as UserIcon } from "lucide-react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 export function UserNav() {
   const { currentUser, logout } = useSettleSmart();
+  const router = useRouter();
+
+  const handleLogout = async () => {
+    await logout();
+    router.push('/login');
+  };
 
   if (!currentUser) {
     return null;
@@ -47,9 +55,11 @@ export function UserNav() {
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
-          <DropdownMenuItem disabled>
-            <UserIcon />
-            <span>Profile</span>
+          <DropdownMenuItem asChild>
+            <Link href="/profile">
+              <UserIcon />
+              <span>Profile</span>
+            </Link>
           </DropdownMenuItem>
            <DropdownMenuItem disabled>
             <Settings />
@@ -57,7 +67,7 @@ export function UserNav() {
           </DropdownMenuItem>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={logout}>
+        <DropdownMenuItem onClick={handleLogout}>
           <LogOut />
           <span>Log out</span>
         </DropdownMenuItem>

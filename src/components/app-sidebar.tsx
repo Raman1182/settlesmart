@@ -1,3 +1,4 @@
+
 "use client";
 
 import Link from "next/link";
@@ -10,6 +11,7 @@ import { SettleSmartLogo } from "./icons";
 import { usePathname } from "next/navigation";
 import { useSettleSmart } from "@/context/settle-smart-context";
 import { cn } from "@/lib/utils";
+import { CreateGroupDialog } from "./create-group-dialog";
 
 
 export function AppSidebar() {
@@ -40,23 +42,28 @@ export function AppSidebar() {
                         
                     </nav>
                 </div>
-                 <div className="mt-auto p-4">
-                    <div className="px-2 text-xs font-semibold uppercase text-muted-foreground lg:px-4 mb-2">Groups</div>
-                     <nav className="grid items-start px-2 text-sm font-medium lg:px-4 gap-1">
-                        {groups.map(group => (
-                             <Link
-                                key={group.id}
-                                href="#"
-                                className={cn(
-                                    "flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary text-sm",
-                                    "opacity-50 cursor-not-allowed" // Make it disabled for now
-                                )}
-                            >
-                                <Users className="h-4 w-4" />
-                                {group.name}
-                            </Link>
-                        ))}
-                    </nav>
+                 <div className="mt-auto p-4 space-y-4">
+                    <div>
+                        <div className="px-2 text-xs font-semibold uppercase text-muted-foreground lg:px-4 mb-2 flex justify-between items-center">
+                            <span>Groups</span>
+                            <CreateGroupDialog />
+                        </div>
+                        <nav className="grid items-start px-2 text-sm font-medium lg:px-4 gap-1">
+                            {groups.map(group => (
+                                <Link
+                                    key={group.id}
+                                    href="#"
+                                    className={cn(
+                                        "flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary text-sm",
+                                        "opacity-50 cursor-not-allowed" // Make it disabled for now
+                                    )}
+                                >
+                                    <Users className="h-4 w-4" />
+                                    {group.name}
+                                </Link>
+                            ))}
+                        </nav>
+                    </div>
                 </div>
             </div>
         </div>

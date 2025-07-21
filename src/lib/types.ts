@@ -1,4 +1,5 @@
 
+
 export type User = {
   id: string; // This will be the Firebase Auth UID
   name: string;
@@ -22,6 +23,8 @@ export type Group = {
   id:string;
   name: string;
   members: string[]; // array of user IDs
+  createdAt?: any; // serverTimestamp
+  createdBy?: string;
 };
 
 export type Balance = {

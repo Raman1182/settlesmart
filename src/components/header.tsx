@@ -1,3 +1,4 @@
+
 "use client"
 
 import {
@@ -12,7 +13,11 @@ import { AppSidebar } from "./app-sidebar"
 import { UserNav } from "./user-nav"
 import { AddExpenseSheet } from "./add-expense-sheet"
 
-export function Header() {
+interface HeaderProps {
+  pageTitle?: string;
+}
+
+export function Header({ pageTitle = "Dashboard" }: HeaderProps) {
     return (
         <header className="flex h-14 items-center gap-4 border-b bg-background px-4 lg:h-[60px] lg:px-6 sticky top-0 z-30">
           <Sheet>
@@ -37,7 +42,7 @@ export function Header() {
             </SheetContent>
           </Sheet>
           <div className="w-full flex-1">
-            <h1 className="text-lg font-semibold md:text-xl">Dashboard</h1>
+            <h1 className="text-lg font-semibold md:text-xl">{pageTitle}</h1>
           </div>
           <div className="flex items-center gap-2">
             <AddExpenseSheet />

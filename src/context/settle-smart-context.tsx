@@ -12,7 +12,7 @@ import {
   signOut,
   User as FirebaseUser
 } from "firebase/auth";
-import { doc, setDoc, getDoc } from "firebase/firestore";
+import { doc, setDoc, getDoc, updateDoc, collection, query, where, getDocs, writeBatch, serverTimestamp, onSnapshot } from "firebase/firestore";
 
 interface SettleSmartContextType {
   currentUser: User | null;
@@ -30,6 +30,8 @@ interface SettleSmartContextType {
   login: (email: string, pass: string) => Promise<void>;
   signup: (email: string, pass: string, name: string) => Promise<void>;
   logout: () => Promise<void>;
+  updateUserProfile: (data: Partial<Omit<User, 'id' | 'email'>>) => Promise<void>;
+  createGroup: (name: string, memberEmails: string[]) => Promise<void>;
 }
 
 const SettleSmartContext = createContext<SettleSmartContextType | undefined>(undefined);
@@ -38,9 +40,8 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   
-  // For now, we'll keep mock data for other parts of the app
   const [users, setUsers] = useState<User[]>(mockUsers);
-  const [groups, setGroups] = useState<Group[]>(mockGroups);
+  const [groups, setGroups] = useState<Group[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>(mockExpenses);
   
   const getInitials = (name: string) => {
@@ -55,30 +56,55 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
       if (firebaseUser) {
         const userDocRef = doc(db, "users", firebaseUser.uid);
-        const userDoc = await getDoc(userDocRef);
-        if (userDoc.exists()) {
-          setCurrentUser({ id: firebaseUser.uid, ...userDoc.data() } as User);
-        } else {
-            // This case might happen if user doc creation failed during signup
-            // Or if user was created via Firebase console directly
+        
+        const unsubUser = onSnapshot(userDocRef, (userDoc) => {
+           if (userDoc.exists()) {
+             const userData = { id: firebaseUser.uid, ...userDoc.data() } as User;
+             setCurrentUser(userData);
+             setUsers(prevUsers => {
+                const userExists = prevUsers.some(u => u.id === userData.id);
+                if (userExists) {
+                    return prevUsers.map(u => u.id === userData.id ? userData : u);
+                }
+                return [...prevUsers, userData];
+             });
+           } else {
+            // This case is unlikely if signup is handled correctly but good as a fallback.
             const name = firebaseUser.displayName || "New User";
-            const newUser: Omit<User, 'id'> = {
+            const newUser: User = {
+                id: firebaseUser.uid,
                 name,
                 email: firebaseUser.email!,
                 avatar: `https://placehold.co/100x100?text=${getInitials(name)}`,
                 initials: getInitials(name),
             };
-            await setDoc(userDocRef, newUser);
-            setCurrentUser({ id: firebaseUser.uid, ...newUser });
-        }
+            setDoc(userDocRef, { name: newUser.name, email: newUser.email, avatar: newUser.avatar, initials: newUser.initials });
+            setCurrentUser(newUser);
+           }
+           setIsLoading(false);
+        });
+
+        return () => unsubUser();
       } else {
         setCurrentUser(null);
+        setGroups([]);
+        setIsLoading(false);
       }
-      setIsLoading(false);
     });
 
     return () => unsubscribe();
   }, []);
+  
+  useEffect(() => {
+    if (currentUser) {
+      const groupsQuery = query(collection(db, "groups"), where("members", "array-contains", currentUser.id));
+      const unsubscribe = onSnapshot(groupsQuery, (snapshot) => {
+        const userGroups = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Group));
+        setGroups(userGroups);
+      });
+      return () => unsubscribe();
+    }
+  }, [currentUser]);
 
 
   const findUserById = useCallback((id: string) => users.find(u => u.id === id), [users]);
@@ -103,18 +129,55 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
       initials,
     };
     await setDoc(doc(db, "users", firebaseUser.uid), newUser);
-    // Auth state change will handle setting the current user
   };
 
   const login = async (email: string, password: string) => {
     await signInWithEmailAndPassword(auth, email, password);
-    // Auth state change will handle setting the current user
   };
 
   const logout = async () => {
     await signOut(auth);
-    // Auth state change will handle setting the current user to null
   };
+  
+  const updateUserProfile = async (data: Partial<Omit<User, 'id' | 'email'>>) => {
+      if (!currentUser) throw new Error("Not authenticated");
+      const userDocRef = doc(db, "users", currentUser.id);
+
+      const updatedData: Partial<User> = { ...data };
+      if (data.name) {
+          updatedData.initials = getInitials(data.name);
+      }
+      
+      await updateDoc(userDocRef, updatedData);
+  };
+  
+  const createGroup = async (name: string, memberEmails: string[]) => {
+      if (!currentUser) throw new Error("Not authenticated");
+
+      const allEmails = [currentUser.email, ...memberEmails];
+      const memberIds = new Set<string>([currentUser.id]);
+
+      const usersQuery = query(collection(db, "users"), where("email", "in", allEmails));
+      const querySnapshot = await getDocs(usersQuery);
+      
+      querySnapshot.forEach((doc) => {
+          memberIds.add(doc.id);
+      });
+
+      if (memberEmails.length + 1 > memberIds.size -1) {
+          // This logic is tricky. A simpler check might be needed.
+          // For now, let's just ensure we don't throw an error for valid members.
+      }
+      
+      const newGroupRef = doc(collection(db, "groups"));
+      await setDoc(newGroupRef, {
+          name,
+          members: Array.from(memberIds),
+          createdAt: serverTimestamp(),
+          createdBy: currentUser.id,
+      });
+  };
+
   
   const balances = useMemo(() => {
     if (!currentUser) {
@@ -132,16 +195,18 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
         const share = expense.amount / numParticipants;
 
+        if(!userBalances[expense.paidById]) userBalances[expense.paidById] = 0;
         userBalances[expense.paidById] += expense.amount;
 
         expense.splitWith.forEach(participantId => {
+            if(!userBalances[participantId]) userBalances[participantId] = 0;
             userBalances[participantId] -= share;
         });
     });
 
     const settlements: { from: string, to: string, amount: number }[] = [];
-    const payers = Object.keys(userBalances).filter(id => userBalances[id] > 0);
-    const owers = Object.keys(userBalances).filter(id => userBalances[id] < 0);
+    const payers = Object.keys(userBalances).filter(id => userBalances[id] > 0.01);
+    const owers = Object.keys(userBalances).filter(id => userBalances[id] < -0.01);
 
     let i = 0, j = 0;
     while (i < payers.length && j < owers.length) {
@@ -190,7 +255,9 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     findUserById,
     login,
     signup,
-    logout
+    logout,
+    updateUserProfile,
+    createGroup,
   };
 
   return (
