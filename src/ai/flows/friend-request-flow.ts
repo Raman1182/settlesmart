@@ -1,3 +1,4 @@
+
 'use server';
 /**
  * @fileOverview Manages friend requests between users.
@@ -34,6 +35,7 @@ export type SendFriendRequestInput = z.infer<
 
 const SendFriendRequestOutputSchema = z.object({
   status: z.string(),
+  friendshipId: z.string().optional(),
 });
 export type SendFriendRequestOutput = z.infer<
   typeof SendFriendRequestOutputSchema
@@ -42,10 +44,48 @@ export type SendFriendRequestOutput = z.infer<
 export async function sendFriendRequest(
   input: SendFriendRequestInput
 ): Promise<SendFriendRequestOutput> {
-  // This flow now just acts as a pass-through in the mock environment.
-  // The actual logic is handled in the context provider to avoid offline errors.
-  return { status: 'pending' };
+  return sendFriendRequestFlow(input);
 }
+
+const sendFriendRequestFlow = ai.defineFlow(
+    {
+        name: 'sendFriendRequestFlow',
+        inputSchema: SendFriendRequestInputSchema,
+        outputSchema: SendFriendRequestOutputSchema,
+    },
+    async ({fromUserId, toUserEmail}) => {
+        const usersRef = collection(db, 'users');
+        const q = query(usersRef, where('email', '==', toUserEmail));
+        const toUserSnapshot = await getDocs(q);
+
+        if (toUserSnapshot.empty) {
+            throw new Error('User with that email does not exist.');
+        }
+        const toUser = { id: toUserSnapshot.docs[0].id, ...toUserSnapshot.docs[0].data()};
+
+        if (toUser.id === fromUserId) {
+            throw new Error("You can't send a request to yourself.");
+        }
+        
+        const friendshipsRef = collection(db, 'friendships');
+        const existingQuery = query(friendshipsRef, where('userIds', 'in', [[fromUserId, toUser.id], [toUser.id, fromUserId]]));
+        const existingSnapshot = await getDocs(existingQuery);
+
+        if(!existingSnapshot.empty) {
+            throw new Error("You are already friends or a request is pending.");
+        }
+        
+        const docRef = await addDoc(friendshipsRef, {
+            userIds: [fromUserId, toUser.id],
+            status: 'pending',
+            requestedBy: fromUserId,
+            createdAt: serverTimestamp(),
+        });
+        
+        return { status: 'pending', friendshipId: docRef.id };
+    }
+);
+
 
 // --- Respond to Friend Request ---
 

@@ -4,11 +4,10 @@
 import React, { createContext, useContext, useState, useMemo, useCallback, useEffect } from "react";
 import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged, User as FirebaseUser, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut } from "firebase/auth";
-import { collection, addDoc, query, where, onSnapshot, doc, updateDoc, serverTimestamp, getDocs, orderBy, deleteDoc, getDoc, setDoc } from "firebase/firestore";
+import { collection, addDoc, query, where, onSnapshot, doc, updateDoc, serverTimestamp, getDocs, orderBy, deleteDoc, getDoc, setDoc, arrayUnion, arrayRemove, writeBatch } from "firebase/firestore";
 import { sendFriendRequest as sendFriendRequestFlow, respondToFriendRequest } from "@/ai/flows/friend-request-flow";
 
 import type { User, Group, Expense, Participant, UnequalSplit, ChecklistItem, Message, Friendship } from "@/lib/types";
-import { users as mockUsers, groups as mockGroups, expenses as mockExpenses } from '@/lib/data';
 
 interface AddExpenseData {
   description: string;
@@ -67,67 +66,106 @@ interface SettleSmartContextType {
 
 const SettleSmartContext = createContext<SettleSmartContextType | undefined>(undefined);
 
-// A simple in-memory store to persist data across "logins" in the mock environment
-const appDataStore = {
-  users: [...mockUsers],
-  groups: [...mockGroups],
-  expenses: [...mockExpenses],
-  groupChecklists: {} as { [groupId: string]: ChecklistItem[] },
-  friendships: [] as Friendship[],
-  messages: [] as Message[]
-};
-
-
 export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   
-  const [users, setUsers] = useState<User[]>(appDataStore.users);
-  const [groups, setGroups] = useState<Group[]>(appDataStore.groups);
-  const [expenses, setExpenses] = useState<Expense[]>(appDataStore.expenses.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
-  const [groupChecklists, setGroupChecklists] = useState<{ [groupId: string]: ChecklistItem[] }>(appDataStore.groupChecklists);
-  const [messages, setMessages] = useState<Message[]>(appDataStore.messages);
-  const [friendships, setFriendships] = useState<Friendship[]>(appDataStore.friendships);
+  const [users, setUsers] = useState<User[]>([]);
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [groupChecklists, setGroupChecklists] = useState<{ [groupId: string]: ChecklistItem[] }>({});
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [friendships, setFriendships] = useState<Friendship[]>([]);
 
 
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
+        setIsLoading(true);
         if (user) {
-            const existingUser = appDataStore.users.find(u => u.id === user.uid || u.email === user.email);
-            if (existingUser) {
-                setCurrentUser(existingUser);
+            const userRef = doc(db, "users", user.uid);
+            const userSnap = await getDoc(userRef);
+            if (userSnap.exists()) {
+                setCurrentUser({ id: user.uid, ...userSnap.data() } as User);
             } else {
-                const newUserRecord: User = {
+                 const newUserRecord: User = {
                     id: user.uid,
                     email: user.email!,
-                    name: user.email!.split('@')[0],
+                    name: user.email!.split('@')[0] || 'New User',
                     avatar: `https://placehold.co/100x100?text=${user.email!.charAt(0).toUpperCase()}`,
                     initials: user.email!.charAt(0).toUpperCase(),
                 };
-                appDataStore.users.push(newUserRecord);
-                setUsers(prev => [...prev, newUserRecord!]);
-                await setDoc(doc(db, "users", user.uid), { email: user.email, name: newUserRecord.name, avatar: newUserRecord.avatar, initials: newUserRecord.initials });
+                await setDoc(userRef, { email: newUserRecord.email, name: newUserRecord.name, avatar: newUserRecord.avatar, initials: newUserRecord.initials });
                 setCurrentUser(newUserRecord);
             }
         } else {
             setCurrentUser(null);
+            setUsers([]);
+            setGroups([]);
+            setExpenses([]);
+            setGroupChecklists({});
+            setMessages([]);
+            setFriendships([]);
         }
         setIsLoading(false);
     });
 
-    return () => unsubscribeAuth();
+    // Listener for all users
+    const unsubscribeUsers = onSnapshot(collection(db, "users"), (snapshot) => {
+        const allUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
+        setUsers(allUsers);
+    });
+
+    return () => {
+        unsubscribeAuth();
+        unsubscribeUsers();
+    };
   }, []);
 
   useEffect(() => {
     if (!currentUser?.id) {
-        setMessages([]);
+        setGroups([]);
+        setExpenses([]);
         setFriendships([]);
+        setMessages([]);
+        setGroupChecklists({});
         return;
     };
     
     const currentUserId = currentUser.id;
 
-    // Listener for friendships
+    const qGroups = query(collection(db, "groups"), where("members", "array-contains", currentUserId));
+    const unsubscribeGroups = onSnapshot(qGroups, (snapshot) => {
+        const userGroups: Group[] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data()} as Group));
+        setGroups(userGroups);
+
+        // Fetch expenses and checklists for these groups
+        if (userGroups.length > 0) {
+            const groupIds = userGroups.map(g => g.id);
+            const qExpenses = query(collection(db, "expenses"), where("groupId", "in", groupIds));
+            const unsubscribeExpenses = onSnapshot(qExpenses, (expSnapshot) => {
+                const groupExpenses = expSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), date: doc.data().date.toDate().toISOString() } as Expense));
+                setExpenses(groupExpenses.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+            });
+
+            const qChecklists = query(collection(db, "checklists"), where("groupId", "in", groupIds));
+            const unsubscribeChecklists = onSnapshot(qChecklists, (checklistSnapshot) => {
+                const checklistsData: {[groupId: string]: ChecklistItem[]} = {};
+                checklistSnapshot.docs.forEach(doc => {
+                    checklistsData[doc.id] = doc.data().items;
+                });
+                setGroupChecklists(checklistsData);
+            });
+
+            return () => {
+                unsubscribeExpenses();
+                unsubscribeChecklists();
+            }
+        } else {
+            setExpenses([]);
+            setGroupChecklists({});
+        }
+    });
+
     const qFriendships = query(collection(db, "friendships"), where("userIds", "array-contains", currentUserId));
     const unsubscribeFriendships = onSnapshot(qFriendships, (querySnapshot) => {
         const userFriendships: Friendship[] = [];
@@ -135,32 +173,24 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
             userFriendships.push({ id: doc.id, ...doc.data()} as Friendship);
         });
         setFriendships(userFriendships);
-        appDataStore.friendships = userFriendships;
-    }, (error) => {
-        console.error("Error fetching friendships:", error);
     });
 
-    // Listener for messages
-    const qMessages = query(collection(db, "messages"), where("chatId", "array-contains", currentUserId));
+    const qMessages = query(collection(db, "messages"), where("chatId", "array-contains", currentUserId), orderBy("createdAt"));
     const unsubscribeMessages = onSnapshot(qMessages, (msgSnapshot) => {
           const receivedMessages: Message[] = msgSnapshot.docs.map(doc => {
             const data = doc.data();
             return {
                 id: doc.id,
                 ...data,
-                chatId: data.chatId.join('_'), // Rejoin for consistency in the app
+                chatId: data.chatId.join('_'),
                 createdAt: data.createdAt?.toDate().toISOString() || new Date().toISOString()
             } as Message
           });
-          const sortedMessages = receivedMessages.sort((a,b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-          setMessages(sortedMessages);
-          appDataStore.messages = sortedMessages;
-
-    }, (error) => {
-        console.error("Error fetching messages:", error);
+          setMessages(receivedMessages);
     });
     
     return () => {
+        unsubscribeGroups();
         unsubscribeFriendships();
         unsubscribeMessages();
     };
@@ -168,18 +198,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
 
   const signUp = async (email: string, pass: string) => {
-    const result = await createUserWithEmailAndPassword(auth, email, pass);
-    const newUserRecord = {
-        id: result.user.uid,
-        email: email,
-        name: email.split('@')[0],
-        avatar: `https://placehold.co/100x100?text=${email.charAt(0).toUpperCase()}`,
-        initials: email.charAt(0).toUpperCase(),
-    };
-    appDataStore.users.push(newUserRecord);
-    setUsers([...appDataStore.users]);
-    await setDoc(doc(db, "users", result.user.uid), { email: newUserRecord.email, name: newUserRecord.name, avatar: newUserRecord.avatar, initials: newUserRecord.initials });
-    return result;
+    return createUserWithEmailAndPassword(auth, email, pass);
   }
 
   const signIn = (email: string, pass: string) => {
@@ -192,34 +211,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
   const sendFriendRequest = async (email: string) => {
     if (!currentUser) throw new Error("Not authenticated");
-    const toUser = users.find(u => u.email === email);
-    if (!toUser) throw new Error("User with that email does not exist.");
-    if (toUser.id === currentUser.id) throw new Error("You can't send a request to yourself.");
-
-    const existing = friendships.find(f => f.userIds.includes(toUser.id) && f.userIds.includes(currentUser.id));
-    if (existing) throw new Error("You are already friends or a request is pending.");
-    
-    // The flow now just returns a status, the context handles the state.
     await sendFriendRequestFlow({ fromUserId: currentUser.id, toUserEmail: email });
-    
-    const newFriendship: Friendship = {
-        id: `fr-${Date.now()}`,
-        userIds: [currentUser.id, toUser.id],
-        status: 'pending',
-        requestedBy: currentUser.id,
-    };
-
-    appDataStore.friendships.push(newFriendship);
-    setFriendships([...appDataStore.friendships]);
-    
-    // Simulate Firestore by adding it there as well
-    const friendshipsRef = collection(db, 'friendships');
-    await addDoc(friendshipsRef, {
-        userIds: [currentUser.id, toUser.id],
-        status: 'pending',
-        requestedBy: currentUser.id,
-        createdAt: serverTimestamp(),
-    });
   }
 
   const acceptFriendRequest = async (friendshipId: string) => {
@@ -233,16 +225,21 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
    const getChatMessages = (friendId: string, callback: (messages: Message[]) => void) => {
     if (!currentUser) return () => {};
 
-    const chatId = [currentUser.id, friendId].sort().join('_');
-    const relevantMessages = messages.filter(m => m.chatId === chatId);
-    callback(relevantMessages);
+    const chatId = [currentUser.id, friendId].sort();
     
-    const unsubscribe = onSnapshot(query(collection(db, "messages")), () => {
-        // This is a bit of a hack to re-run the filter when any message changes.
-        // A more optimized approach would listen to a specific chat query.
-        const allCurrentMessages = appDataStore.messages;
-        const updatedMessages = allCurrentMessages.filter(m => m.chatId === chatId);
-        callback(updatedMessages)
+    const q = query(
+        collection(db, "messages"), 
+        where("chatId", "==", chatId),
+        orderBy("createdAt", "asc")
+    );
+    
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+        const chatMessages = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+            createdAt: doc.data().createdAt?.toDate().toISOString() || new Date().toISOString(),
+        } as Message));
+        callback(chatMessages);
     });
     
     return unsubscribe;
@@ -252,16 +249,6 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     if (!currentUser) throw new Error("Not authenticated");
     const chatId = [currentUser.id, receiverId].sort();
     
-    const chatRef = doc(db, 'chats', chatId.join('_'));
-    const chatDoc = await getDoc(chatRef);
-
-    if(!chatDoc.exists()) {
-       await setDoc(chatRef, {
-         id: chatId.join('_'),
-         members: chatId,
-       });
-    }
-
     await addDoc(collection(db, "messages"), {
       chatId: chatId, 
       senderId: currentUser.id,
@@ -277,45 +264,23 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   }
 
   const findUserById = useCallback((id: string) => {
-      let user = users.find(u => u.id === id);
-      if (!user) {
-          // Fallback for ad-hoc users who might not be in the main list yet
-          return {
-              id,
-              name: 'Unknown User',
-              email: '',
-              avatar: 'https://placehold.co/100x100.png',
-              initials: '?'
-          }
-      }
-      return user;
+      return users.find(u => u.id === id);
   }, [users]);
 
 
-  const addExpense = (expenseData: AddExpenseData) => {
+  const addExpense = async (expenseData: AddExpenseData) => {
      if (!currentUser) throw new Error("No user found");
-    const newExpense: Expense = {
-      id: `exp-${new Date().getTime()}`,
+    
+     await addDoc(collection(db, "expenses"), {
       ...expenseData,
-      date: new Date().toISOString(),
+      date: new Date(),
       isRecurring: expenseData.isRecurring || false,
-    };
-    appDataStore.expenses.push(newExpense);
-    setExpenses(appDataStore.expenses.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+    });
   };
   
   const addAdHocUser = (email: string) => {
-    if (users.some(u => u.email === email)) {
-        throw new Error("User with this email already exists.");
-    }
-    const newUser: User = {
-        id: `user-${new Date().getTime()}-${Math.random()}`,
-        name: email.split('@')[0],
-        email: email,
-        avatar: `https://placehold.co/100x100?text=${email.charAt(0).toUpperCase()}`,
-        initials: email.charAt(0).toUpperCase(),
-    };
-    setUsers(prev => [...prev, newUser]);
+    // This function is less relevant with a full user DB but can be kept for future non-registered user features
+    console.warn("addAdHocUser called, but not implemented for full Firestore backend.");
   }
 
   const createGroup = async (name: string, memberEmails: string[]) => {
@@ -323,76 +288,97 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
       
       const memberIds = new Set<string>([currentUser.id]);
       
-      memberEmails.forEach(email => {
-        const user = users.find(u => u.email === email);
-        if (user) {
-            memberIds.add(user.id);
+      const userQueries = memberEmails.map(email => query(collection(db, "users"), where("email", "==", email)));
+      const userSnapshots = await Promise.all(userQueries.map(q => getDocs(q)));
+
+      userSnapshots.forEach(snap => {
+        if (!snap.empty) {
+            memberIds.add(snap.docs[0].id);
         }
       });
       
-      const newGroup: Group = {
-        id: `group-${new Date().getTime()}`,
+      await addDoc(collection(db, "groups"), {
         name,
         members: Array.from(memberIds),
         createdBy: currentUser.id,
-        createdAt: new Date().toISOString(),
-      };
-      
-      setGroups(prev => [...prev, newGroup]);
-      appDataStore.groups.push(newGroup);
+        createdAt: serverTimestamp(),
+      });
   };
 
   const updateGroupMembers = async (groupId: string, memberEmailsToAdd: string[], memberIdsToRemove: string[]) => {
-      const membersToAddIds = users.filter(u => memberEmailsToAdd.includes(u.email)).map(u => u.id);
-      
-      const groupIndex = groups.findIndex(g => g.id === groupId);
-      if (groupIndex > -1) {
-          const newMembers = new Set(groups[groupIndex].members);
-          membersToAddIds.forEach(id => newMembers.add(id));
-          memberIdsToRemove.forEach(id => newMembers.delete(id));
-          const updatedGroups = [...groups];
-          updatedGroups[groupIndex].members = Array.from(newMembers);
-          setGroups(updatedGroups);
+      const groupRef = doc(db, "groups", groupId);
+      const membersToAddIds: string[] = [];
+      if (memberEmailsToAdd.length > 0) {
+        const userQuery = query(collection(db, "users"), where("email", "in", memberEmailsToAdd));
+        const userSnapshots = await getDocs(userQuery);
+        userSnapshots.forEach(doc => membersToAddIds.push(doc.id));
+      }
+
+      await updateDoc(groupRef, {
+        members: arrayUnion(...membersToAddIds),
+      });
+      if(memberIdsToRemove.length > 0) {
+         await updateDoc(groupRef, {
+            members: arrayRemove(...memberIdsToRemove),
+         });
       }
   };
   
   const deleteGroup = async (groupId: string) => {
-    setGroups(prev => prev.filter(g => g.id !== groupId));
-    setExpenses(prev => prev.filter(e => e.groupId !== groupId));
+    const batch = writeBatch(db);
+    // Delete group document
+    batch.delete(doc(db, "groups", groupId));
+    // Delete associated expenses
+    const expQuery = query(collection(db, "expenses"), where("groupId", "==", groupId));
+    const expSnap = await getDocs(expQuery);
+    expSnap.forEach(doc => batch.delete(doc.ref));
+    // Delete associated checklist
+    batch.delete(doc(db, "checklists", groupId));
+    await batch.commit();
   };
   
   const leaveGroup = async (groupId: string) => {
      if (!currentUser) throw new Error("Not authenticated");
-     const groupIndex = groups.findIndex(g => g.id === groupId);
-      if (groupIndex > -1) {
-          const updatedGroups = [...groups];
-          updatedGroups[groupIndex].members = updatedGroups[groupIndex].members.filter(mId => mId !== currentUser.id);
-          setGroups(updatedGroups);
-      }
+     const groupRef = doc(db, "groups", groupId);
+     await updateDoc(groupRef, {
+        members: arrayRemove(currentUser.id)
+     });
   };
   
-  const updateGroupChecklist = (groupId: string, items: ChecklistItem[]) => {
-    setGroupChecklists(prev => ({ ...prev, [groupId]: items}));
+  const updateGroupChecklist = async (groupId: string, items: ChecklistItem[]) => {
+    const checklistRef = doc(db, "checklists", groupId);
+    await setDoc(checklistRef, { groupId, items }, { merge: true });
   };
   
   const settleFriendDebt = async (friendId: string) => {
     if (!currentUser) throw new Error("Not authenticated");
-    setExpenses(prev => prev.filter(e => {
-        const participants = new Set(e.splitWith);
-        return !(participants.size === 2 && participants.has(currentUser.id) && participants.has(friendId));
-    }));
+    const q = query(collection(db, "expenses"), where('splitWith', 'array-contains', currentUser.id));
+    const snapshot = await getDocs(q);
+    const batch = writeBatch(db);
+    snapshot.forEach(doc => {
+        const expense = doc.data() as Expense;
+        const participants = new Set(expense.splitWith);
+        if (participants.size === 2 && participants.has(friendId)) {
+            batch.delete(doc.ref);
+        }
+    });
+    await batch.commit();
   }
   
-  const settleAllInGroup = (groupId: string) => {
-    setExpenses(prev => prev.filter(e => e.groupId !== groupId));
+  const settleAllInGroup = async (groupId: string) => {
+    const q = query(collection(db, "expenses"), where("groupId", "==", groupId));
+    const snapshot = await getDocs(q);
+    const batch = writeBatch(db);
+    snapshot.forEach(doc => batch.delete(doc.ref));
+    await batch.commit();
   };
 
-  const calculateSettlements = useCallback((expensesToCalculate: Expense[], allParticipants: Participant[]) => {
+  const calculateSettlements = useCallback((expensesToCalculate: Expense[], allParticipantIds: string[]) => {
     const userBalances: { [key: string]: number } = {};
-    allParticipants.forEach(p => userBalances[p] = 0);
+    allParticipantIds.forEach(pId => userBalances[pId] = 0);
 
     expensesToCalculate.forEach(expense => {
-        const participantsInThisExpense = expense.splitWith.filter(p => allParticipants.includes(p));
+        const participantsInThisExpense = expense.splitWith.filter(p => allParticipantIds.includes(p));
         if (participantsInThisExpense.length === 0) return;
 
         if(!userBalances[expense.paidById]) userBalances[expense.paidById] = 0;
@@ -414,13 +400,13 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     return userBalances;
   }, []);
   
-  const getAllParticipants = useMemo(() => {
-    const all = new Set<Participant>(users.map(u => u.id));
+  const getAllParticipantsInExpenses = useMemo(() => {
+    const all = new Set<string>();
     expenses.forEach(e => {
         e.splitWith.forEach(p => all.add(p));
     });
     return Array.from(all);
-  }, [users, expenses]);
+  }, [expenses]);
 
   const getGroupBalances = useCallback((groupId: string) => {
       const group = groups.find(g => g.id === groupId);
@@ -486,7 +472,9 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     if (!currentUser) {
         return { totalOwedToUser: 0, totalOwedByUser: 0, settlements: [] };
     }
-    const userBalances = calculateSettlements(expenses, getAllParticipants);
+    const allInvolvedUserIds = [...new Set([...users.map(u => u.id), ...getAllParticipantsInExpenses])];
+    const userBalances = calculateSettlements(expenses, allInvolvedUserIds);
+
     const finalSettlements = simplifyDebts(userBalances)
         .map(debt => {
             const fromUser = findUserById(debt.from);
@@ -503,7 +491,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
       totalOwedByUser: finalSettlements.filter(s => s.from?.id === currentUser?.id).reduce((sum, s) => sum + s.amount, 0),
       settlements: finalSettlements
     };
-  }, [expenses, currentUser, findUserById, calculateSettlements, getAllParticipants, simplifyDebts]);
+  }, [expenses, currentUser, findUserById, calculateSettlements, getAllParticipantsInExpenses, simplifyDebts, users]);
 
 
   const value = {
