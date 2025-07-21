@@ -11,17 +11,24 @@ import { useRouter } from "next/navigation";
 import { ArrowRight, Plus, Users } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { formatCurrency } from "@/lib/utils";
+import { useMemo } from "react";
 
 export default function GroupsPage() {
-  const { groups, getGroupBalances, findUserById } = useSettleSmart();
+  const { groups: allGroups, getGroupBalances, findUserById, currentUser } = useSettleSmart();
   const router = useRouter();
+
+  const userGroups = useMemo(() => {
+    if (!currentUser) return [];
+    return allGroups.filter(group => group.members.includes(currentUser.id));
+  }, [allGroups, currentUser]);
+
 
   return (
     <div className="flex flex-col min-h-screen w-full">
       <Header pageTitle="Groups" />
       <main className="flex-1 p-4 sm:p-6 md:p-8">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {groups.map((group) => {
+          {userGroups.map((group) => {
              const groupBalance = getGroupBalances(group.id);
              const createdBy = findUserById(group.createdBy || "");
 
@@ -57,7 +64,7 @@ export default function GroupsPage() {
                 </CardContent>
                 <CardFooter className="flex justify-between items-center text-xs text-muted-foreground">
                    <span>
-                        Last activity: {formatDistanceToNow(new Date(group.createdAt), { addSuffix: true })}
+                        Last activity: {group.createdAt ? formatDistanceToNow(new Date(group.createdAt), { addSuffix: true }) : 'N/A'}
                     </span>
                    <Button variant="link" className="p-0 h-auto text-primary text-xs">
                       View
@@ -69,10 +76,10 @@ export default function GroupsPage() {
           })}
         </div>
 
-        {groups.length === 0 && (
+        {userGroups.length === 0 && (
           <div className="flex flex-col items-center justify-center text-center text-muted-foreground h-full rounded-lg border-2 border-dashed border-muted/50 py-12">
             <h3 className="text-xl font-bold mb-2">No groups yet</h3>
-            <p className="mb-4">Create a group to start sharing expenses!</p>
+            <p className="mb-4">Create a group to start sharing expenses, or ask a friend to add you to one!</p>
             <CreateGroupDialog>
                 <Button>
                     <Plus className="mr-2 h-4 w-4" />
@@ -83,7 +90,7 @@ export default function GroupsPage() {
         )}
       </main>
 
-      {groups.length > 0 && (
+      {userGroups.length > 0 && (
          <CreateGroupDialog>
             <Button
                 size="icon"
