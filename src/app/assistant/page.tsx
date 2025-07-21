@@ -20,6 +20,8 @@ interface Message {
   isLoading?: boolean;
 }
 
+const HISTORY_LIMIT = 6; // Keep the last 6 messages (3 user, 3 AI)
+
 export default function AssistantPage() {
   const { expenses, groups, users, balances, currentUser } = useSettleSmart();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -56,14 +58,18 @@ export default function AssistantPage() {
         isLoading: true,
     }
 
+    const currentMessages = [...messages, userMessage];
     setMessages((prev) => [...prev, userMessage, thinkingMessage]);
+    const currentInput = input;
     setInput("");
 
     startThinkingTransition(async () => {
       try {
+        const history = currentMessages.slice(-HISTORY_LIMIT).map(({ id, isLoading, ...rest}) => rest);
         const context = { expenses, groups, users, balances, currentUser };
         const result = await answerFinancialQuestion({
-          question: input,
+          question: currentInput,
+          history,
           context,
         });
         
