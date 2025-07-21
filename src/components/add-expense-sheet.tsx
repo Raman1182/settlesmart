@@ -83,7 +83,7 @@ export function AddExpenseSheet({ children, open, onOpenChange }: AddExpenseShee
   const [nlInput, setNlInput] = useState("");
   const [isParsing, startParsingTransition] = useTransition();
   const [isSubmitting, startSubmittingTransition] = useTransition();
-  const { addExpense, users, currentUser, groups, findUserById } = useSettleSmart();
+  const { addExpense, users, currentUser, groups, findUserById, addAdHocUser } = useSettleSmart();
   const { toast } = useToast();
   
   const [adHocParticipants, setAdHocParticipants] = useState<string[]>([]);
@@ -191,8 +191,24 @@ export function AddExpenseSheet({ children, open, onOpenChange }: AddExpenseShee
   const onSubmit = (values: z.infer<typeof expenseFormSchema>) => {
     startSubmittingTransition(async () => {
       try {
-        const { category } = await categorizeExpense({ description: values.description });
-        addExpense({ ...values, groupId: values.groupId || null, category: category || 'Other' });
+        // Handle ad-hoc participants by creating placeholder users
+        const finalSplitWith: string[] = [];
+        for (const p of values.splitWith) {
+          const user = findUserById(p);
+          if (user) {
+            finalSplitWith.push(user.id);
+          } else {
+            // This is an ad-hoc participant by name
+            const newAdHocUser = await addAdHocUser(p);
+            finalSplitWith.push(newAdHocUser.id);
+          }
+        }
+        
+        const finalValues = { ...values, splitWith: finalSplitWith };
+
+        const { category } = await categorizeExpense({ description: finalValues.description });
+        addExpense({ ...finalValues, groupId: finalValues.groupId || null, category: category || 'Other' });
+        
         toast({
             title: "Expense Added!",
             description: `Got it. "${values.description}" is on the books.`,

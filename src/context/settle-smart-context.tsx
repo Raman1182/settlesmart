@@ -692,5 +692,3 @@ export const useSettleSmart = (): SettleSmartContextType => {
   }
   return context;
 };
-
-    
