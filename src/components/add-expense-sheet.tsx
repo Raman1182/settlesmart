@@ -93,22 +93,42 @@ export function AddExpenseSheet({ children, open, onOpenChange }: AddExpenseShee
           form.setValue("amount", result.amount);
           
           const participantNames = result.participants.map(p => p.toLowerCase());
-          
-          const participantIds = users
-            .filter(u => participantNames.includes(u.name.toLowerCase()) || (participantNames.includes('you') && u.id === currentUser.id) )
-            .map(u => u.id);
+          const foundParticipantIds = new Set<string>();
+          const notFoundNames = new Set<string>();
+
+          participantNames.forEach(name => {
+            const isCurrentUser = (name === 'you' || name === 'me' || name === 'i');
+            const user = isCurrentUser 
+              ? currentUser 
+              : users.find(u => u.name.toLowerCase() === name);
+
+            if (user) {
+              foundParticipantIds.add(user.id);
+            } else if (!isCurrentUser) {
+              notFoundNames.add(name);
+            }
+          });
 
           // Ensure current user is included if "me" or "I" was parsed as "you"
-          if (participantNames.includes('you') && !participantIds.includes(currentUser.id)) {
-            participantIds.push(currentUser.id);
+          if (participantNames.some(p => ['you', 'me', 'i'].includes(p))) {
+            foundParticipantIds.add(currentUser.id);
           }
           
-          form.setValue("splitWith", participantIds);
+          form.setValue("splitWith", Array.from(foundParticipantIds));
 
-          toast({
-            title: "Success: Expense Auto-filled",
-            description: "We've parsed the details. Please review and select a group before submitting.",
-          });
+          if (notFoundNames.size > 0) {
+            const names = Array.from(notFoundNames).join(', ');
+            toast({
+              variant: "destructive",
+              title: "Users Not Found",
+              description: `Could not find: ${names}. Please add them as friends to include them.`,
+            });
+          } else {
+             toast({
+              title: "Success: Expense Auto-filled",
+              description: "We've parsed the details. Please review and select a group before submitting.",
+            });
+          }
         }
       } catch (error) {
         console.error("AI parsing failed:", error);
@@ -148,7 +168,9 @@ export function AddExpenseSheet({ children, open, onOpenChange }: AddExpenseShee
 
   const membersOfSelectedGroup = useMemo(() => {
     if (!selectedGroupId) return [];
-    return groups.find(g => g.id === selectedGroupId)?.members.map(id => findUserById(id)).filter(Boolean) as User[] || [];
+    const group = groups.find(g => g.id === selectedGroupId);
+    if (!group) return [];
+    return group.members.map(id => findUserById(id)).filter(Boolean) as User[];
   }, [groups, selectedGroupId, findUserById]);
   
   const participantsToDisplay = useMemo(() => {
@@ -156,7 +178,8 @@ export function AddExpenseSheet({ children, open, onOpenChange }: AddExpenseShee
       return membersOfSelectedGroup;
     }
     // If no group is selected, show the users that have been selected via AI parsing
-    return users.filter(u => splitWithIds.includes(u.id));
+    const aiSelectedUsers = users.filter(u => splitWithIds.includes(u.id));
+    return aiSelectedUsers.length > 0 ? aiSelectedUsers : [];
   }, [selectedGroupId, membersOfSelectedGroup, splitWithIds, users]);
 
 
@@ -302,7 +325,7 @@ export function AddExpenseSheet({ children, open, onOpenChange }: AddExpenseShee
                 />
               </div>
 
-             {participantsToDisplay?.length > 0 && (
+             {(participantsToDisplay?.length ?? 0) > 0 && (
                 <FormField
                     control={form.control}
                     name="splitWith"

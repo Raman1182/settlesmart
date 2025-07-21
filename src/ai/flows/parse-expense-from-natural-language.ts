@@ -21,7 +21,7 @@ const ParseExpenseOutputSchema = z.object({
   amount: z.number().describe('The amount of the expense.'),
   participants: z
     .array(z.string())
-    .describe('The names of the participants involved in the expense.'),
+    .describe('The names of all participants involved in the expense.'),
   description: z.string().describe('A short description of the expense.'),
 });
 export type ParseExpenseOutput = z.infer<typeof ParseExpenseOutputSchema>;
@@ -36,10 +36,10 @@ const prompt = ai.definePrompt({
   output: {schema: ParseExpenseOutputSchema},
   prompt: `You are an AI assistant that extracts expense information from natural language input.
 
-  Given the following input, extract the amount, participants, and description of the expense. The current year is ${new Date().getFullYear()}.
+  Given the following input, extract the amount, all participants, and a short description of the expense. The current year is ${new Date().getFullYear()}.
 
-  - The words "me", "I", or "I paid" should be interpreted as a participant named "you".
-  - Extract all participant names mentioned.
+  - The words "me", "I", or "I paid" should always be interpreted as a participant named "you".
+  - Extract every single participant name mentioned. If there are three people mentioned, extract all three names.
 
   Example: "$50 for pizza with Alex and Ben" -> { amount: 50, participants: ["Alex", "Ben"], description: "Pizza" }
   Example: "I paid 1200 for last night's movie tickets for me, Chloe, and David" -> { amount: 1200, participants: ["you", "Chloe", "David"], description: "Movie tickets" }

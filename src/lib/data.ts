@@ -7,7 +7,6 @@ export const users: User[] = [
   { id: 'user3', name: 'Ben', email: 'ben@example.com', avatar: 'https://placehold.co/100x100/8b5cf6/ffffff.png', initials: 'B' },
   { id: 'user4', name: 'Chloe', email: 'chloe@example.com', avatar: 'https://placehold.co/100x100/14b8a6/ffffff.png', initials: 'C' },
   { id: 'user5', name: 'David', email: 'david@example.com', avatar: 'https://placehold.co/100x100/f59e0b/ffffff.png', initials: 'D' },
-  { id: 'user6', name: 'Rachel', email: 'rachel@example.com', avatar: 'https://placehold.co/100x100/ef4444/ffffff.png', initials: 'R' },
 ];
 
 export const groups: Group[] = [
@@ -21,7 +20,7 @@ export const groups: Group[] = [
     { 
         id: 'group2', 
         name: 'Apartment Flatmates', 
-        members: ['user1', 'user4', 'user5', 'user6'],
+        members: ['user1', 'user4', 'user5'],
         createdBy: 'user4',
         createdAt: '2023-09-15T10:00:00Z',
     },
