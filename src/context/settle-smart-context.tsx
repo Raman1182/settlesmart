@@ -50,8 +50,8 @@ interface SettleSmartContextType {
   groupChecklists: { [groupId: string]: ChecklistItem[] };
   updateGroupChecklist: (groupId: string, items: ChecklistItem[]) => void;
   initiateSettlement: (friendId: string, expenseIds: string[]) => Promise<void>;
-  confirmSettlement: (expenseIds: string[], messageId: string) => Promise<void>;
-  declineSettlement: (messageId: string) => Promise<void>;
+  confirmSettlement: (expenseIds: string[], messageId: string, chatId: string) => Promise<void>;
+  declineSettlement: (messageId: string, chatId: string) => Promise<void>;
   calculateSettlements: (expensesToCalculate: Expense[], allParticipantIds: string[]) => { [key: string]: number; };
   simplifyDebts: (userBalances: { [key: string]: number; }) => { from: string; to: string; amount: number; }[];
   simplifyGroupDebts: (groupId: string) => { from: User, to: User, amount: number }[];
@@ -388,6 +388,10 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     await setDoc(checklistRef, { groupId, items }, { merge: true });
   };
   
+  const getChatId = (user1: string, user2: string) => {
+    return [user1, user2].sort().join('_');
+  };
+
   const initiateSettlement = async (friendId: string, expenseIds: string[]) => {
       if (!currentUser) return;
       const friend = findUserById(friendId);
@@ -396,7 +400,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
       await sendMessage(friend.id, message, 'system_confirmation', { relatedExpenseIds: expenseIds });
   };
   
-  const confirmSettlement = async (expenseIds: string[], messageId: string) => {
+  const confirmSettlement = async (expenseIds: string[], messageId: string, chatId: string) => {
     if (!db || !currentUser) return;
     const batch = writeBatch(db);
     
@@ -408,30 +412,17 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
         });
     });
 
-    const message = (await getDocs(query(collection(db, 'chats'), where('participantIds', 'array-contains', currentUser.id))))
-        .docs.map(d => d.ref)
-        .map(ref => doc(ref, 'messages', messageId));
-        
-    // This is not perfect, we don't know which chat the message is in.
-    // A better approach would be to pass the chatId to confirmSettlement.
-    // For now, let's assume it finds it.
-    for (const messageRef of message) {
-      batch.update(messageRef, { status: 'confirmed' });
-    }
+    const messageRef = doc(db, 'chats', chatId, 'messages', messageId);
+    batch.update(messageRef, { status: 'confirmed' });
 
     await batch.commit();
   };
 
-  const declineSettlement = async (messageId: string) => {
+  const declineSettlement = async (messageId: string, chatId: string) => {
     if (!db || !currentUser) return;
     
-    const message = (await getDocs(query(collection(db, 'chats'), where('participantIds', 'array-contains', currentUser.id))))
-        .docs.map(d => d.ref)
-        .map(ref => doc(ref, 'messages', messageId));
-
-    for (const messageRef of message) {
-      await updateDoc(messageRef, { status: 'declined' });
-    }
+    const messageRef = doc(db, 'chats', chatId, 'messages', messageId);
+    await updateDoc(messageRef, { status: 'declined' });
   };
 
   const settleAllInGroup = async (groupId: string) => {
@@ -510,10 +501,6 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     } else {
         throw new Error("Friendship not found.");
     }
-  };
-  
-  const getChatId = (user1: string, user2: string) => {
-    return [user1, user2].sort().join('_');
   };
 
   const getChatMessages = (friendId: string, callback: (messages: Message[]) => void) => {
@@ -809,5 +796,3 @@ export const useSettleSmart = (): SettleSmartContextType => {
   }
   return context;
 };
-
-    

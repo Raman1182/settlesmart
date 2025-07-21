@@ -15,6 +15,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card } from "@/components/ui/card";
 import { format } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
+import { Badge } from "@/components/ui/badge";
+
 
 export default function ChatPage() {
   const { friendId: friendIdParam } = useParams();
@@ -54,7 +56,7 @@ export default function ChatPage() {
         if (isUnsettled1on1) {
             const amountPerPerson = e.amount / 2;
             if (e.paidById === currentUser.id) {
-                balance -= amountPerPerson; // Friend owes me, so it's a negative balance from their perspective
+                balance -= amountPerPerson; // Friend owes me
             } else {
                 balance += amountPerPerson; // I owe friend
             }
@@ -118,13 +120,13 @@ export default function ChatPage() {
   
   const handleConfirm = async (message: Message) => {
     if (!message.relatedExpenseIds) return;
-    await confirmSettlement(message.relatedExpenseIds, message.id);
+    await confirmSettlement(message.relatedExpenseIds, message.id, message.chatId);
     toast({ title: "Settled!", description: "The transaction has been confirmed and marked as paid." });
   }
 
   const handleDecline = async (message: Message) => {
       if (!message.relatedExpenseIds) return;
-      await declineSettlement(message.id);
+      await declineSettlement(message.id, message.chatId);
       toast({ variant: "destructive", title: "Settlement Declined", description: "You've marked that the payment was not received." });
   }
 
@@ -179,8 +181,8 @@ export default function ChatPage() {
 
                     return (
                         <div key={message.id} className="flex flex-col items-center justify-center gap-2 text-xs text-muted-foreground my-2">
-                           <div className="flex items-center gap-2">
-                             <Info className="h-3 w-3" /> <span>{message.text}</span>
+                           <div className="flex items-center gap-2 text-center p-2 bg-muted/50 rounded-md">
+                             <Info className="h-4 w-4 shrink-0" /> <span>{message.text}</span>
                            </div>
                             {isAwaitingConfirmation && isConfirmationForCurrentUser && (
                                 <div className="flex gap-2 mt-1">
@@ -257,5 +259,3 @@ export default function ChatPage() {
     </div>
   );
 }
-
-    

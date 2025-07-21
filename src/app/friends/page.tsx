@@ -32,6 +32,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogClose,
 } from "@/components/ui/dialog"
 import { TrustScoreIndicator } from "@/components/trust-score-indicator";
 import { formatCurrency, cn } from "@/lib/utils";
@@ -179,10 +180,12 @@ export default function FriendsPage() {
     }, [currentUser, friend, expenses]);
 
     const handleSettle = async () => {
-      if (!friend || iOweFriend) return;
-        await initiateSettlement(friend.id, unsettledExpenseIds);
-        setSelectedFriendForHistory(null);
-        toast({ title: "Confirmation sent!", description: `A confirmation request has been sent to ${friend.name}. They need to verify the payment.`})
+      if (!friend || !iOweFriend) return;
+        startProcessingTransition(async () => {
+          await initiateSettlement(friend.id, unsettledExpenseIds);
+          setSelectedFriendForHistory(null);
+          toast({ title: "Confirmation sent!", description: `A confirmation request has been sent to ${friend.name}. They need to verify the payment.`})
+        });
     }
     
     const iOweFriend = netBalance < -0.01;
@@ -218,15 +221,15 @@ export default function FriendsPage() {
                     )) : <p className="text-center text-muted-foreground py-4">No 1-on-1 transactions yet. Go buy 'em a coffee!</p>}
                     </div>
                 </ScrollArea>
-                <AlertDialog>
+                 <AlertDialog>
                   <AlertDialogTrigger asChild>
-                     <Button disabled={isSettled || friendOwesMe}>I've Paid My Debt</Button>
+                     <Button disabled={!iOweFriend || isProcessing}>I've Paid My Debt</Button>
                   </AlertDialogTrigger>
                   <AlertDialogContent>
                       <AlertDialogHeader>
                           <AlertDialogTitle>Did you pay {friend.name}?</AlertDialogTitle>
                           <AlertDialogDescription>
-                              This will send a notification to {friend.name} to confirm they received your payment. Debts will be marked as settled only after they confirm.
+                              This will send a notification to {friend.name} to confirm they received your payment of <span className="font-bold">{formatCurrency(Math.abs(netBalance))}</span>. Debts will be marked as settled only after they confirm.
                           </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
@@ -234,7 +237,7 @@ export default function FriendsPage() {
                           <AlertDialogAction onClick={handleSettle}>Yep, I Paid</AlertDialogAction>
                       </AlertDialogFooter>
                   </AlertDialogContent>
-              </AlertDialog>
+                </AlertDialog>
             </DialogContent>
         </Dialog>
     )
@@ -429,9 +432,7 @@ export default function FriendsPage() {
             </AlertDialogContent>
         </AlertDialog>
 
-        <TransactionHistoryDialog />
+        {selectedFriendForHistory && <TransactionHistoryDialog />}
     </>
   );
 }
-
-    
