@@ -178,6 +178,10 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
             return;
         }
         const groupIds = groups.map(g => g.id);
+        if (groupIds.length === 0) {
+          setExpenses([]);
+          return;
+        }
         const qExpenses = query(collection(db, "expenses"), where("groupId", "in", groupIds));
         const unsubscribeExpenses = onSnapshot(qExpenses, (expSnapshot) => {
             const groupExpenses = expSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), date: doc.data().date.toDate().toISOString() } as Expense));
@@ -193,6 +197,10 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
             return;
         }
         const groupIds = groups.map(g => g.id);
+        if (groupIds.length === 0) {
+            setGroupChecklists({});
+            return;
+        }
         const qChecklists = query(collection(db, "checklists"), where("groupId", "in", groupIds));
         const unsubscribeChecklists = onSnapshot(qChecklists, (checklistSnapshot) => {
             const checklistsData: {[groupId: string]: ChecklistItem[]} = {};
@@ -354,15 +362,17 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   }, [users]);
   
   const addAdHocUser = async (name: string): Promise<User> => {
-    const adHocUser: User = {
-        id: `adhoc_${Date.now()}_${name.replace(/\s+/g, '')}`,
+    if (!db) throw new Error("DB not initialized");
+    const adHocUser: Omit<User, 'id'> = {
         name: name,
-        email: `${name.replace(/\s+/g, '_')}@adhoc.settlesmart.app`,
+        email: `${name.replace(/\s+/g, '_').toLowerCase()}@adhoc.settlesmart.app`,
         initials: name.charAt(0).toUpperCase(),
         avatar: `https://placehold.co/100x100.png?text=${name.charAt(0).toUpperCase()}`
     };
-    setUsers(prev => [...prev, adHocUser]);
-    return adHocUser;
+    const docRef = await addDoc(collection(db, "users"), adHocUser);
+    const newUser = { id: docRef.id, ...adHocUser };
+    setUsers(prev => [...prev, newUser]);
+    return newUser;
   };
 
   const addExpense = async (expenseData: AddExpenseData) => {
