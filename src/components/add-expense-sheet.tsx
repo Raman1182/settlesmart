@@ -39,7 +39,7 @@ import { SheetTrigger } from "./ui/sheet";
 import { Badge } from "./ui/badge";
 import { ToggleGroup, ToggleGroupItem } from "./ui/toggle-group";
 import { Switch } from "./ui/switch";
-import { Label } from "./ui/label";
+import { Label } from "@/components/ui/label";
 
 const splitSchema = z.object({
   participantId: z.string(),
@@ -115,7 +115,15 @@ export function AddExpenseSheet({ children, open, onOpenChange }: AddExpenseShee
 
   useEffect(() => {
     if (currentUser && controlledOpen) {
-      form.setValue('paidById', currentUser.id);
+      form.reset({
+        description: "",
+        amount: 0,
+        paidById: currentUser.id,
+        splitWith: [currentUser.id],
+        groupId: "",
+        splitType: 'equally',
+        unequalSplits: []
+      });
     }
   }, [currentUser, controlledOpen, form]);
 
@@ -247,7 +255,7 @@ export function AddExpenseSheet({ children, open, onOpenChange }: AddExpenseShee
         description: "",
         amount: 0,
         paidById: currentUser?.id || "",
-        splitWith: [],
+        splitWith: currentUser ? [currentUser.id] : [],
         groupId: "",
         splitType: 'equally',
         unequalSplits: []
