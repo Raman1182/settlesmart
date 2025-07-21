@@ -29,7 +29,7 @@ import { z } from "zod";
 import { useSettleSmart } from "@/context/settle-smart-context";
 import { parseExpense } from "@/ai/flows/parse-expense-from-natural-language";
 import { categorizeExpense } from "@/ai/flows/categorize-expense";
-import { DollarSign, Loader2, Plus, Sparkles } from "lucide-react";
+import { DollarSign, Loader2, Plus, Sparkles, Camera } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { Checkbox } from "./ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
@@ -166,7 +166,7 @@ export function AddExpenseSheet({ children, open, onOpenChange }: AddExpenseShee
         <SheetHeader className="p-6">
           <SheetTitle>Log a New Expense</SheetTitle>
           <SheetDescription>
-            Describe your expense in plain English for our AI to parse, or fill out the form manually.
+            Describe your expense in plain English, scan a receipt, or fill out the form manually.
           </SheetDescription>
         </SheetHeader>
         <div className="p-6 border-y border-border/50 bg-card/50">
@@ -177,10 +177,16 @@ export function AddExpenseSheet({ children, open, onOpenChange }: AddExpenseShee
                 rows={3}
                 className="bg-background text-base"
             />
-            <Button onClick={handleParse} disabled={isParsing || !nlInput} className="w-full mt-4">
-                {isParsing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-                Parse with AI
-            </Button>
+            <div className="flex gap-2 mt-4">
+                 <Button onClick={handleParse} disabled={isParsing || !nlInput} className="w-full">
+                    {isParsing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+                    Parse with AI
+                </Button>
+                <Button variant="outline" className="w-full" disabled>
+                    <Camera className="mr-2 h-4 w-4" />
+                    Scan Receipt
+                </Button>
+            </div>
         </div>
 
         <Form {...form}>
@@ -259,7 +265,7 @@ export function AddExpenseSheet({ children, open, onOpenChange }: AddExpenseShee
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {membersOfSelectedGroup && membersOfSelectedGroup.map(user => (
+                          {membersOfSelectedGroup.map(user => (
                             <SelectItem key={user.id} value={user.id}>
                               <div className="flex items-center gap-2">
                                 <Avatar className="h-6 w-6">
