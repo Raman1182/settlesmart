@@ -182,35 +182,54 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
       });
       setRawChats(allChats);
     });
+    
+    // This fetches all personal (non-group) expenses for the current user
+    const qPersonalExpenses = query(
+        collection(db, "expenses"), 
+        where("groupId", "==", null), 
+        where("splitWith", "array-contains", currentUser.id)
+    );
+    const unsubPersonalExpenses = onSnapshot(qPersonalExpenses, (snapshot) => {
+        const personalExpenses = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), date: doc.data().date.toDate().toISOString() } as Expense));
+        // We merge this with existing expenses, making sure to avoid duplicates
+        setExpenses(prev => [...prev.filter(exp => exp.groupId !== null), ...personalExpenses]);
+    });
+
 
     return () => {
         unsubGroups();
         unsubFriendships();
         unsubChats();
+        unsubPersonalExpenses();
     };
   }, [currentUser, isAuthLoading, db]);
   
   // Listeners that depend on the user's groups
   useEffect(() => {
-    if (!db || groups.length === 0) {
+    if (!db || !currentUser) {
         setExpenses([]);
         setGroupChecklists({});
         return;
     }
     
-    const groupIds = groups.map(g => g.id);
-    if (groupIds.length === 0) {
-      setExpenses([]);
-      setGroupChecklists({});
-      return;
+    // If no groups, clear group-related data
+    if (groups.length === 0) {
+        setExpenses(prev => prev.filter(exp => exp.groupId === null));
+        setGroupChecklists({});
+        return () => {};
     }
+    
+    const groupIds = groups.map(g => g.id);
 
+    // Fetch expenses for all groups the user is a member of
     const qExpenses = query(collection(db, "expenses"), where("groupId", "in", groupIds));
     const unsubscribeExpenses = onSnapshot(qExpenses, (expSnapshot) => {
         const groupExpenses = expSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), date: doc.data().date.toDate().toISOString() } as Expense));
-        setExpenses(groupExpenses.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+        // We merge group expenses with existing personal expenses
+        setExpenses(prev => [...prev.filter(exp => exp.groupId === null), ...groupExpenses]);
     });
 
+    // Fetch checklists for all groups the user is a member of
     const qChecklists = query(collection(db, "checklists"), where("groupId", "in", groupIds));
     const unsubscribeChecklists = onSnapshot(qChecklists, (checklistSnapshot) => {
         const checklistsData: {[groupId: string]: ChecklistItem[]} = {};
@@ -224,7 +243,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
         unsubscribeExpenses();
         unsubscribeChecklists();
     }
-  }, [db, groups]);
+  }, [db, currentUser, groups]);
 
    const chats = useMemo(() => {
     if (!currentUser) return [];
@@ -255,9 +274,19 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   
   const addAdHocUser = async (name: string): Promise<User> => {
     if (!db) throw new Error("DB not initialized");
+    
+    // Check if an ad-hoc user with this name already exists to avoid duplicates
+    const adHocEmail = `${name.replace(/\s+/g, '_').toLowerCase()}@adhoc.settlesmart.app`;
+    const q = query(collection(db, "users"), where("email", "==", adHocEmail));
+    const existing = await getDocs(q);
+    if (!existing.empty) {
+        const doc = existing.docs[0];
+        return { id: doc.id, ...doc.data() } as User;
+    }
+
     const adHocUser: Omit<User, 'id'> = {
         name: name,
-        email: `${name.replace(/\s+/g, '_').toLowerCase()}@adhoc.settlesmart.app`,
+        email: adHocEmail,
         initials: name.charAt(0).toUpperCase(),
         avatar: `https://placehold.co/100x100.png?text=${name.charAt(0).toUpperCase()}`
     };
@@ -350,7 +379,8 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     if (!currentUser || !db) throw new Error("Not authenticated or DB not initialized");
     const q = query(
       collection(db, "expenses"), 
-      where('splitWith', 'array-contains', currentUser.id)
+      where('splitWith', 'array-contains', currentUser.id),
+      where("groupId", "==", null)
     );
     const snapshot = await getDocs(q);
     const batch = writeBatch(db);
@@ -358,7 +388,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
         const expense = doc.data() as Expense;
         const participants = new Set(expense.splitWith);
         // Only settle 1-on-1 expenses
-        if (participants.size === 2 && participants.has(friendId) && !expense.groupId) {
+        if (participants.size === 2 && participants.has(friendId)) {
             batch.delete(doc.ref);
         }
     });
@@ -403,7 +433,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     if (!friendshipSnap.exists()) return;
 
     const friendshipData = friendshipSnap.data();
-    const friendId = friendshipData.requesterId;
+    const friendId = friendshipData.requesterId === currentUser.id ? friendshipData.receiverId : friendshipData.requesterId;
     
     const batch = writeBatch(db);
     batch.update(friendshipRef, { status: 'accepted' });
@@ -415,7 +445,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
       participantIds: [currentUser.id, friendId],
       lastMessage: null,
       unreadCount: { [currentUser.id]: 0, [friendId]: 0 },
-    });
+    }, { merge: true });
 
     await batch.commit();
   };

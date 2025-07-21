@@ -34,6 +34,7 @@ function ChatSettleUp({ friendId }: { friendId: string }) {
     const netBalance = useMemo(() => {
         if (!currentUser || !friend) return 0;
         let balance = 0;
+        // Filter for 1-on-1 expenses between the current user and the friend
         const relatedExpenses = expenses.filter(e => {
             const participants = new Set(e.splitWith);
             return !e.groupId && participants.has(currentUser.id) && participants.has(friendId) && participants.size === 2;
@@ -42,8 +43,10 @@ function ChatSettleUp({ friendId }: { friendId: string }) {
         relatedExpenses.forEach(e => {
             const amountPerPerson = e.amount / e.splitWith.length;
             if (e.paidById === currentUser.id) {
-                balance += amountPerPerson * (e.splitWith.length - 1);
+                // If I paid, the friend owes me their share
+                balance += amountPerPerson;
             } else {
+                // If the friend paid, I owe them my share
                 balance -= amountPerPerson;
             }
         });
