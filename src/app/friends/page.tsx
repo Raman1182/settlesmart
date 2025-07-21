@@ -113,18 +113,21 @@ export default function FriendsPage() {
   }
 
   const getFriendTrustScore = (balance: number) => {
-    // 1. lending to someone inc score - good
-    // 2. borrowing dec it - bad
-    // 3. repaying inc it - not tracked yet, but lower debt is good
-    // 4. more debt decit - bad
-
-    // If friend owes me, their score is lower
-    // If I owe friend, their score is higher
-    let score = 50; // Start with a neutral score
+    // A more complex calculation for friend's trust score.
+    // Start with a neutral score.
+    let score = 50; 
     
-    // balance > 0 means friend owes me, which is a negative for their score
-    // balance < 0 means I owe friend, which is a positive for their score
-    score -= balance / 10; 
+    // A balance > 0 means the friend owes me. This negatively impacts their score.
+    // The impact is logarithmic, so large debts have a bigger, but not infinite, impact.
+    if (balance > 0) {
+      score -= Math.min(40, Math.log(balance + 1) * 5);
+    }
+    
+    // A balance < 0 means I owe the friend. This positively impacts their score, as they trusted me with money.
+    // The impact is smaller than the negative impact of them owing me.
+    if (balance < 0) {
+      score += Math.min(30, Math.log(Math.abs(balance) + 1) * 3);
+    }
 
     return Math.max(0, Math.min(100, score));
   }
@@ -134,7 +137,7 @@ export default function FriendsPage() {
       const scoreType = friend.isRegistered ? "Public" : "Personal";
       toast({
           title: `${friend.name}'s Trust Score`,
-          description: `${scoreType} Trust Score is ${score.toFixed(0)}. Higher is better!`
+          description: `${scoreType} Trust Score is ${score.toFixed(0)}. This is calculated based on your shared financial history.`
       })
   }
 
