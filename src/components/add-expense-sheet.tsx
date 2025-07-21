@@ -39,6 +39,7 @@ import { SheetTrigger } from "./ui/sheet";
 import { Badge } from "./ui/badge";
 import { ToggleGroup, ToggleGroupItem } from "./ui/toggle-group";
 import { Switch } from "./ui/switch";
+import { Label } from "./ui/label";
 
 const splitSchema = z.object({
   participantId: z.string(),
