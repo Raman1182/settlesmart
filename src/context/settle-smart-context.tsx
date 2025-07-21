@@ -174,7 +174,14 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
     const qGroups = query(collection(db, "groups"), where("members", "array-contains", currentUser.id));
     const unsubGroups = onSnapshot(qGroups, (snapshot) => {
-        const userGroups: Group[] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data()} as Group));
+        const userGroups: Group[] = snapshot.docs.map(doc => {
+            const data = doc.data();
+            return { 
+                id: doc.id, 
+                ...data,
+                createdAt: data.createdAt?.toDate().toISOString()
+            } as Group
+        });
         setGroups(userGroups);
         
         if (userGroups.length > 0) {
@@ -771,3 +778,6 @@ export const useSettleSmart = (): SettleSmartContextType => {
   }
   return context;
 };
+
+
+    

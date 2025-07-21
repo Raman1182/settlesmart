@@ -34,7 +34,7 @@ export type Group = {
   id:string;
   name: string;
   members: string[]; // array of user IDs
-  createdAt?: any; // serverTimestamp
+  createdAt?: string; // ISO string
   createdBy?: string;
 };
 
@@ -75,3 +75,5 @@ export interface Chat {
     lastMessage: Message | null;
     unreadCount: { [userId: string]: number };
 }
+
+    
