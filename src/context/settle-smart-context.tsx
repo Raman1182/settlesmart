@@ -26,7 +26,7 @@ const SettleSmartContext = createContext<SettleSmartContextType | undefined>(und
 
 export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   
   const [users, setUsers] = useState<User[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
@@ -35,11 +35,12 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   useEffect(() => {
     // Simulate loading mock data
     setIsLoading(true);
-    setCurrentUser(mockUsers[0]);
+    const loggedInUser = mockUsers[0];
+    setCurrentUser(loggedInUser);
     setUsers(mockUsers);
     
     // Simulate group and expense data for the current user
-    const userGroups = mockGroups.filter(g => g.members.includes(mockUsers[0].id));
+    const userGroups = mockGroups.filter(g => g.members.includes(loggedInUser.id));
     setGroups(userGroups);
     
     const userGroupIds = userGroups.map(g => g.id);

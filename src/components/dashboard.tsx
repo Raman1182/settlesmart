@@ -1,7 +1,6 @@
 
 "use client";
 
-import { AppSidebar } from "@/components/app-sidebar";
 import { Header } from "@/components/header";
 import { DashboardOverview } from "@/components/dashboard-overview";
 import { RecentExpenses } from "@/components/recent-expenses";
@@ -24,25 +23,22 @@ export function Dashboard() {
   }
   
   return (
-    <div className="grid min-h-screen w-full md:grid-cols-[240px_1fr] lg:grid-cols-[280px_1fr]">
-      <AppSidebar />
-      <div className="flex flex-col">
-        <Header />
-        <main className="flex flex-1 flex-col gap-4 p-4 sm:p-6 md:gap-8 md:p-8">
-          <DashboardOverview />
-          <div className="grid gap-4 md:gap-8 lg:grid-cols-2 xl:grid-cols-3">
-             <div className="xl:col-span-2 grid auto-rows-max gap-4 md:gap-8">
-                 <SpendingOverTimeChart />
-                 <RecentExpenses />
-            </div>
-            <div className="grid auto-rows-max gap-4 md:gap-8">
-                <BalanceDetails />
-                <SpendingByCategoryChart />
-            </div>
+    <div className="flex flex-col min-h-screen w-full">
+      <Header />
+      <main className="flex flex-1 flex-col gap-4 p-4 sm:p-6 md:gap-8 md:p-8">
+        <DashboardOverview />
+        <div className="grid gap-4 md:gap-8 lg:grid-cols-2 xl:grid-cols-3">
+           <div className="xl:col-span-2 grid auto-rows-max gap-4 md:gap-8">
+               <SpendingOverTimeChart />
+               <RecentExpenses />
           </div>
-        </main>
-        <BottomNavbar />
-      </div>
+          <div className="grid auto-rows-max gap-4 md:gap-8">
+              <BalanceDetails />
+              <SpendingByCategoryChart />
+          </div>
+        </div>
+      </main>
+      <BottomNavbar />
     </div>
   );
 }

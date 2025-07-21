@@ -3,6 +3,7 @@ import { Inter } from 'next/font/google'
 import './globals.css';
 import { SettleSmartProvider } from '@/context/settle-smart-context';
 import { Toaster } from "@/components/ui/toaster"
+import { CommandMenu } from '@/components/command-menu';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-sans' })
 
@@ -22,6 +23,7 @@ export default function RootLayout({
         <SettleSmartProvider>
           {children}
           <Toaster />
+          <CommandMenu />
         </SettleSmartProvider>
       </body>
     </html>

@@ -4,7 +4,6 @@
 import { useState, useMemo, useTransition, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useSettleSmart } from "@/context/settle-smart-context";
-import { AppSidebar } from "@/components/app-sidebar";
 import { Header } from "@/components/header";
 import { Loader2, Plus, Trash2, User, X } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -29,12 +28,6 @@ export default function GroupSettingsPage() {
     return group?.members.map(id => findUserById(id)).filter(Boolean) as any[] || [];
   }, [group, findUserById]);
   
-  useEffect(() => {
-    if (!isAuthLoading && !currentUser) {
-      router.push('/login');
-    }
-  }, [isAuthLoading, currentUser, router]);
-
   if (isAuthLoading || !currentUser) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -45,15 +38,12 @@ export default function GroupSettingsPage() {
 
   if (!group) {
     return (
-      <div className="grid min-h-screen w-full md:grid-cols-[240px_1fr] lg:grid-cols-[280px_1fr]">
-        <AppSidebar />
-        <div className="flex flex-col">
-          <Header pageTitle="Group Not Found" />
-          <main className="flex flex-1 flex-col items-center justify-center gap-4 p-4 sm:p-6">
-            <p>The group you're looking for doesn't exist or you're not a member.</p>
-            <Button onClick={() => router.push('/')}>Go to Dashboard</Button>
-          </main>
-        </div>
+      <div className="flex flex-col min-h-screen w-full">
+        <Header pageTitle="Group Not Found" />
+        <main className="flex flex-1 flex-col items-center justify-center gap-4 p-4 sm:p-6">
+          <p>The group you're looking for doesn't exist or you're not a member.</p>
+          <Button onClick={() => router.push('/')}>Go to Dashboard</Button>
+        </main>
       </div>
     );
   }
@@ -95,9 +85,7 @@ export default function GroupSettingsPage() {
 
 
   return (
-    <div className="grid min-h-screen w-full md:grid-cols-[240px_1fr] lg:grid-cols-[280px_1fr]">
-      <AppSidebar />
-      <div className="flex flex-col">
+    <div className="flex flex-col min-h-screen w-full">
         <Header pageTitle={`Group: ${group.name}`} />
         <main className="flex flex-1 flex-col gap-4 p-4 sm:p-6 md:gap-8 md:p-8">
             <div className="grid gap-8 md:grid-cols-2">
@@ -173,6 +161,5 @@ export default function GroupSettingsPage() {
             </div>
         </main>
       </div>
-    </div>
   );
 }
