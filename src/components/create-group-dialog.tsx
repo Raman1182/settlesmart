@@ -20,14 +20,24 @@ import { useToast } from "@/components/ui/use-toast";
 import { Loader2, Plus, Users, X } from "lucide-react";
 import { Badge } from "./ui/badge";
 
-export function CreateGroupDialog({ children }: { children?: ReactNode }) {
-  const [isOpen, setIsOpen] = useState(false);
+interface CreateGroupDialogProps {
+  children?: ReactNode;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+}
+
+export function CreateGroupDialog({ children, open, onOpenChange }: CreateGroupDialogProps) {
+  const [internalOpen, setInternalOpen] = useState(false);
   const [groupName, setGroupName] = useState("");
   const [memberEmail, setMemberEmail] = useState("");
   const [memberEmails, setMemberEmails] = useState<string[]>([]);
   const [isSubmitting, startSubmittingTransition] = useTransition();
   const { createGroup, currentUser } = useSettleSmart();
   const { toast } = useToast();
+
+  const isControlled = open !== undefined && onOpenChange !== undefined;
+  const isOpen = isControlled ? open : internalOpen;
+  const setIsOpen = isControlled ? onOpenChange : setInternalOpen;
 
   const handleAddMember = () => {
     if (memberEmail && !memberEmails.includes(memberEmail) && memberEmail !== currentUser?.email) {
@@ -87,9 +97,7 @@ export function CreateGroupDialog({ children }: { children?: ReactNode }) {
         if(!open) resetForm();
         setIsOpen(open);
     }}>
-      <DialogTrigger asChild>
-        {children || <Button><Users className="mr-2 h-4 w-4" /> Create Group</Button>}
-      </DialogTrigger>
+      {children && <DialogTrigger asChild>{children}</DialogTrigger>}
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>Create a New Group</DialogTitle>

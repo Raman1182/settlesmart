@@ -28,11 +28,13 @@ import { useSettleSmart } from "@/context/settle-smart-context";
 import { answerFinancialQuestion } from "@/ai/flows/financial-qna-flow";
 import { DialogTitle } from "@radix-ui/react-dialog";
 import { AddExpenseSheet } from "./add-expense-sheet";
+import { CreateGroupDialog } from "./create-group-dialog";
 
 export function CommandMenu() {
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
   const [addExpenseOpen, setAddExpenseOpen] = React.useState(false);
+  const [createGroupOpen, setCreateGroupOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
   const [aiResponse, setAiResponse] = React.useState("");
   const [isThinking, setIsThinking] = React.useState(false);
@@ -125,7 +127,7 @@ export function CommandMenu() {
               <CreditCard className="mr-2 h-4 w-4" />
               <span>Add Expense</span>
             </CommandItem>
-            <CommandItem disabled>
+            <CommandItem onSelect={() => runCommand(() => setCreateGroupOpen(true))}>
               <Users className="mr-2 h-4 w-4" />
               <span>Create Group</span>
             </CommandItem>
@@ -142,6 +144,7 @@ export function CommandMenu() {
         </CommandList>
       </CommandDialog>
       <AddExpenseSheet open={addExpenseOpen} onOpenChange={setAddExpenseOpen} />
+      <CreateGroupDialog open={createGroupOpen} onOpenChange={setCreateGroupOpen} />
     </>
   );
 }
