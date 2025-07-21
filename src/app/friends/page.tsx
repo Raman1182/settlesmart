@@ -108,11 +108,20 @@ export default function FriendsPage() {
   }
 
   const getTrustScore = (balance: number) => {
-    if (balance > 100) return 30; // They owe you a lot
-    if (balance > 0) return 50; // They owe you
-    if (balance < -100) return 95; // You owe them a lot
-    if (balance < 0) return 80; // You owe them
-    return 70; // Settled up, but not as high as when you owe them (since that means they trusted you)
+    // balance > 0 -> they owe you (good for them, they borrowed, so their score is lower)
+    // balance < 0 -> you owe them (bad for them, they lent, so their score is higher)
+    let score = 70; // Base score
+    
+    // If they owe you, their score decreases based on the amount.
+    if (balance > 0) {
+      score -= Math.min(30, balance / 10);
+    } 
+    // If you owe them, their score increases because they trusted you.
+    else if (balance < 0) {
+      score += Math.min(25, Math.abs(balance) / 10);
+    }
+    
+    return Math.max(0, Math.min(100, score));
   };
 
   return (
