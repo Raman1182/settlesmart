@@ -14,6 +14,7 @@ import { GroupMembers } from "@/components/group-members";
 import { GroupExpenses } from "@/components/group-expenses";
 import { GroupStats } from "@/components/group-stats";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { GroupChecklist } from "@/components/group-checklist";
 
 export default function GroupDetailsPage() {
   const { id: groupId } = useParams();
@@ -90,13 +91,17 @@ export default function GroupDetailsPage() {
               </Card>
 
               <Tabs defaultValue="expenses" className="w-full">
-                  <TabsList className="grid w-full grid-cols-3">
+                  <TabsList className="grid w-full grid-cols-4">
                       <TabsTrigger value="expenses">Expenses</TabsTrigger>
+                      <TabsTrigger value="checklist">Checklist</TabsTrigger>
                       <TabsTrigger value="members">Members</TabsTrigger>
                       <TabsTrigger value="stats">Stats</TabsTrigger>
                   </TabsList>
                   <TabsContent value="expenses">
                     <GroupExpenses groupId={group.id} />
+                  </TabsContent>
+                   <TabsContent value="checklist">
+                    <GroupChecklist group={group} />
                   </TabsContent>
                   <TabsContent value="members">
                       <GroupMembers group={group} isOwner={isOwner} />
@@ -119,6 +124,6 @@ export default function GroupDetailsPage() {
             <AlertDialogAction>Got it</AlertDialogAction>
             </AlertDialogFooter>
         </AlertDialogContent>
-      </AlertDialog>
+      </div>
   );
 }

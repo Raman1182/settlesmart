@@ -5,3 +5,4 @@ config();
 import '@/ai/flows/parse-expense-from-natural-language.ts';
 import '@/ai/flows/categorize-expense.ts';
 import '@/ai/flows/financial-qna-flow.ts';
+import '@/ai/flows/shopping-list-flow.ts';

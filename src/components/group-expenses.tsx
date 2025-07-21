@@ -17,6 +17,7 @@ const categoryIcons: { [key: string]: React.ReactNode } = {
   'Utilities': <Lightbulb className="h-5 w-5" />,
   'Rent': <Home className="h-5 w-5" />,
   'Groceries': <ShoppingCart className="h-5 w-5" />,
+  'Shopping': <ShoppingCart className="h-5 w-5" />,
   'Other': <Package className="h-5 w-5" />,
 };
 

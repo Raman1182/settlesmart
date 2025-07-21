@@ -119,7 +119,7 @@ export default function FriendsPage() {
                  </AlertDialogTrigger>
                 <div className="flex items-center text-xs text-muted-foreground gap-1 pt-2">
                     <Shield className="h-4 w-4 text-primary/50" />
-                    <span>Trust Score: 88 (Reliable)</span>
+                    <span>Trust Score: Coming Soon</span>
                 </div>
               </CardFooter>
             </Card>

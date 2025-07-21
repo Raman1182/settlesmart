@@ -2,7 +2,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useMemo, useCallback, useEffect } from "react";
-import type { User, Group, Expense, Participant, UnequalSplit } from "@/lib/types";
+import type { User, Group, Expense, Participant, UnequalSplit, ChecklistItem } from "@/lib/types";
 import { users as mockUsers, groups as mockGroups, expenses as mockExpenses } from '@/lib/data';
 
 interface AddExpenseData {
@@ -40,6 +40,8 @@ interface SettleSmartContextType {
   updateGroupMembers: (groupId: string, memberEmailsToAdd: string[], memberIdsToRemove: string[]) => Promise<void>;
   deleteGroup: (groupId: string) => Promise<void>;
   leaveGroup: (groupId: string) => Promise<void>;
+  groupChecklists: { [groupId: string]: ChecklistItem[] };
+  updateGroupChecklist: (groupId: string, items: ChecklistItem[]) => void;
 }
 
 const SettleSmartContext = createContext<SettleSmartContextType | undefined>(undefined);
@@ -51,6 +53,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const [users, setUsers] = useState<User[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [groupChecklists, setGroupChecklists] = useState<{ [groupId: string]: ChecklistItem[] }>({});
 
   useEffect(() => {
     // Simulate loading mock data
@@ -138,7 +141,14 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
        }
        return g;
      }));
-  }
+  };
+  
+  const updateGroupChecklist = (groupId: string, items: ChecklistItem[]) => {
+    setGroupChecklists(prev => ({
+        ...prev,
+        [groupId]: items,
+    }));
+  };
 
   const calculateSettlements = useCallback((expensesToCalculate: Expense[], allParticipants: Participant[]) => {
     const userBalances: { [key: string]: number } = {};
@@ -255,7 +265,9 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     createGroup,
     updateGroupMembers,
     deleteGroup,
-    leaveGroup
+    leaveGroup,
+    groupChecklists,
+    updateGroupChecklist,
   };
 
   return (

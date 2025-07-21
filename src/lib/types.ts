@@ -41,3 +41,9 @@ export type Balance = {
   userId: string;
   amount: number;
 }
+
+export interface ChecklistItem {
+  id: string;
+  name: string;
+  completed: boolean;
+}
