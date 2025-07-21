@@ -9,8 +9,8 @@ import { Header } from "@/components/header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { ArrowLeft, Send, Loader2, Info } from "lucide-react";
-import type { Message } from "@/lib/types";
+import { ArrowLeft, Send, Loader2, Info, History } from "lucide-react";
+import type { Expense, Message } from "@/lib/types";
 import { cn, formatCurrency } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card, CardContent } from "@/components/ui/card";
@@ -26,31 +26,45 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import { Badge } from "@/components/ui/badge";
 
 function ChatSettleUp({ friendId }: { friendId: string }) {
     const { currentUser, findUserById, settleFriendDebt, sendMessage, expenses } = useSettleSmart();
     const friend = findUserById(friendId);
+    const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
 
-    const netBalance = useMemo(() => {
-        if (!currentUser || !friend) return 0;
+    const { netBalance, transactionHistory } = useMemo(() => {
+        if (!currentUser || !friend) return { netBalance: 0, transactionHistory: [] };
+        
         let balance = 0;
-        // Filter for 1-on-1 expenses between the current user and the friend
-        const relatedExpenses = expenses.filter(e => {
+        const history: Expense[] = [];
+        
+        expenses.forEach(e => {
             const participants = new Set(e.splitWith);
-            return !e.groupId && participants.has(currentUser.id) && participants.has(friendId) && participants.size === 2;
-        });
-
-        relatedExpenses.forEach(e => {
-            const amountPerPerson = e.amount / e.splitWith.length;
-            if (e.paidById === currentUser.id) {
-                // If I paid, the friend owes me their share
-                balance += amountPerPerson;
-            } else {
-                // If the friend paid, I owe them my share
-                balance -= amountPerPerson;
+            if (!e.groupId && participants.has(currentUser.id) && participants.has(friendId) && participants.size === 2) {
+                history.push(e);
+                if (e.status === 'unsettled') {
+                    const amountPerPerson = e.amount / 2;
+                    if (e.paidById === currentUser.id) {
+                        balance += amountPerPerson;
+                    } else {
+                        balance -= amountPerPerson;
+                    }
+                }
             }
         });
-        return balance;
+        
+        history.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        return { netBalance: balance, transactionHistory: history };
+
     }, [currentUser, friend, expenses]);
 
     const handleSettle = async () => {
@@ -81,16 +95,45 @@ function ChatSettleUp({ friendId }: { friendId: string }) {
                 </div>
                 <div className="flex gap-2">
                     {friendOwes && <Button size="sm" onClick={handleRemind}>Remind</Button>}
+                    <Dialog open={historyDialogOpen} onOpenChange={setHistoryDialogOpen}>
+                        <DialogTrigger asChild>
+                           <Button size="sm" variant="ghost"><History className="h-4 w-4" /></Button>
+                        </DialogTrigger>
+                        <DialogContent className="max-w-lg">
+                            <DialogHeader>
+                                <DialogTitle>Transaction History with {friend.name}</DialogTitle>
+                                <DialogDescription>A complete record of your 1-on-1 expenses.</DialogDescription>
+                            </DialogHeader>
+                            <ScrollArea className="max-h-[60vh]">
+                                <div className="pr-4 space-y-2">
+                                {transactionHistory.length > 0 ? transactionHistory.map(e => (
+                                    <div key={e.id} className="flex items-center justify-between text-sm p-2 rounded-md bg-muted/50">
+                                        <div>
+                                            <p className="font-medium">{e.description}</p>
+                                            <p className="text-xs text-muted-foreground">
+                                                Paid by {findUserById(e.paidById)?.name} on {format(new Date(e.date), "MMM d, yyyy")}
+                                            </p>
+                                        </div>
+                                        <div className="text-right">
+                                             <p className="font-mono">{formatCurrency(e.amount)}</p>
+                                             <Badge variant={e.status === 'settled' ? 'secondary' : 'default'}>{e.status}</Badge>
+                                        </div>
+                                    </div>
+                                )) : <p className="text-center text-muted-foreground py-4">No transactions yet.</p>}
+                                </div>
+                            </ScrollArea>
+                        </DialogContent>
+                    </Dialog>
                     {!isSettled && (
                         <AlertDialog>
                             <AlertDialogTrigger asChild>
-                                <Button size="sm" variant="secondary">Settle All</Button>
+                                <Button size="sm" variant="secondary">Settle</Button>
                             </AlertDialogTrigger>
                             <AlertDialogContent>
                                 <AlertDialogHeader>
-                                    <AlertDialogTitle>Settle all debts with {friend.name}?</AlertDialogTitle>
+                                    <AlertDialogTitle>Settle debts with {friend.name}?</AlertDialogTitle>
                                     <AlertDialogDescription>
-                                        This will delete all 1-on-1 expenses between you and {friend.name}, marking everything as paid. This cannot be undone.
+                                        This will mark all outstanding 1-on-1 expenses between you and {friend.name} as settled. This action cannot be undone.
                                     </AlertDialogDescription>
                                 </AlertDialogHeader>
                                 <AlertDialogFooter>

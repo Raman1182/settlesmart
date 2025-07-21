@@ -23,9 +23,11 @@ export type Expense = {
   splitWith: Participant[]; // Array of user IDs or ad-hoc names
   splitType: 'equally' | 'unequally';
   unequalSplits?: UnequalSplit[];
-  date: string;
+  date: string; // ISO string for creation date
   groupId: string | null; // Can be null for expenses not in a group
-  isRecurring?: boolean;
+  status: 'unsettled' | 'settled';
+  settledAt?: string | null; // ISO string for settlement date
+  recurring?: 'daily' | 'weekly' | 'monthly' | 'yearly' | null;
 };
 
 export type Group = {

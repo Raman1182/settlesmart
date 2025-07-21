@@ -8,6 +8,7 @@ import { getAuth, onAuthStateChanged, User as FirebaseUser, createUserWithEmailA
 import { getFirestore, collection, addDoc, query, where, onSnapshot, doc, updateDoc, serverTimestamp, getDocs, orderBy, deleteDoc, getDoc, setDoc, arrayUnion, arrayRemove, writeBatch, type Firestore, enableIndexedDbPersistence, limit, increment } from "firebase/firestore";
 import { firebaseConfig } from "@/lib/firebase";
 import type { User, Group, Expense, Participant, UnequalSplit, ChecklistItem, Friendship, Message, Chat } from "@/lib/types";
+import { differenceInDays } from "date-fns";
 
 interface AddExpenseData {
   description: string;
@@ -18,7 +19,7 @@ interface AddExpenseData {
   unequalSplits?: UnequalSplit[];
   groupId: string | null;
   category: string;
-  isRecurring: boolean;
+  isRecurring: boolean; // Keep this for form simplicity, convert to `recurring` on save
 }
 
 interface SettleSmartContextType {
@@ -154,11 +155,39 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
         setGroupChecklists({});
         return;
     }
+    
+    // Fetch all expenses where the current user is involved, either as payer or participant
+    const qExpenses = query(collection(db, "expenses"), where("splitWith", "array-contains", currentUser.id));
+    const unsubExpenses = onSnapshot(qExpenses, (snapshot) => {
+        const userExpenses = snapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+                id: doc.id,
+                ...data,
+                date: data.date.toDate().toISOString(),
+                settledAt: data.settledAt ? data.settledAt.toDate().toISOString() : null,
+            } as Expense
+        });
+        setExpenses(userExpenses);
+    });
 
     const qGroups = query(collection(db, "groups"), where("members", "array-contains", currentUser.id));
     const unsubGroups = onSnapshot(qGroups, (snapshot) => {
         const userGroups: Group[] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data()} as Group));
         setGroups(userGroups);
+        
+        // Fetch checklists for these groups
+        if (userGroups.length > 0) {
+            const groupIds = userGroups.map(g => g.id);
+            const qChecklists = query(collection(db, "checklists"), where("groupId", "in", groupIds));
+            onSnapshot(qChecklists, (checklistSnapshot) => {
+                const checklistsData: {[groupId: string]: ChecklistItem[]} = {};
+                checklistSnapshot.docs.forEach(doc => {
+                    checklistsData[doc.id] = doc.data().items;
+                });
+                setGroupChecklists(checklistsData);
+            });
+        }
     });
     
     const qFriendships = query(collection(db, "friendships"), where("participantIds", "array-contains", currentUser.id));
@@ -182,77 +211,15 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
       });
       setRawChats(allChats);
     });
-    
-    // This fetches all personal (non-group) expenses for the current user
-    const qPersonalExpenses = query(
-        collection(db, "expenses"), 
-        where("groupId", "==", null), 
-        where("splitWith", "array-contains", currentUser.id)
-    );
-    const unsubPersonalExpenses = onSnapshot(qPersonalExpenses, (snapshot) => {
-        const personalExpenses = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), date: doc.data().date.toDate().toISOString() } as Expense));
-        setExpenses(prev => {
-            const groupExpenses = prev.filter(exp => exp.groupId !== null);
-            const merged = [...groupExpenses];
-            const personalExpenseIds = new Set(personalExpenses.map(e => e.id));
-            // Add existing personal expenses not in the new snapshot
-            prev.forEach(e => {
-                if(e.groupId === null && !personalExpenseIds.has(e.id)) {
-                    merged.push(e)
-                }
-            })
-            // Add new/updated personal expenses
-            merged.push(...personalExpenses);
-            // remove duplicates
-            const uniqueExpenses = merged.filter((v,i,a)=>a.findIndex(t=>(t.id === v.id))===i)
-            return uniqueExpenses;
-        });
-    });
-
 
     return () => {
+        unsubExpenses();
         unsubGroups();
         unsubFriendships();
         unsubChats();
-        unsubPersonalExpenses();
     };
   }, [currentUser, isAuthLoading, db]);
   
-  // Listeners that depend on the user's groups
-  useEffect(() => {
-    if (!db || !currentUser || groups.length === 0) {
-        setExpenses(prev => prev.filter(exp => exp.groupId === null));
-        setGroupChecklists({});
-        return () => {};
-    }
-    
-    const groupIds = groups.map(g => g.id);
-
-    const qExpenses = query(collection(db, "expenses"), where("groupId", "in", groupIds));
-    const unsubscribeExpenses = onSnapshot(qExpenses, (expSnapshot) => {
-        const groupExpenses = expSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), date: doc.data().date.toDate().toISOString() } as Expense));
-        setExpenses(prev => {
-             const personalExpenses = prev.filter(exp => exp.groupId === null);
-             const merged = [...personalExpenses, ...groupExpenses];
-             const uniqueExpenses = merged.filter((v,i,a)=>a.findIndex(t=>(t.id === v.id))===i);
-             return uniqueExpenses;
-        });
-    });
-
-    const qChecklists = query(collection(db, "checklists"), where("groupId", "in", groupIds));
-    const unsubscribeChecklists = onSnapshot(qChecklists, (checklistSnapshot) => {
-        const checklistsData: {[groupId: string]: ChecklistItem[]} = {};
-        checklistSnapshot.docs.forEach(doc => {
-            checklistsData[doc.id] = doc.data().items;
-        });
-        setGroupChecklists(checklistsData);
-    });
-
-    return () => {
-        unsubscribeExpenses();
-        unsubscribeChecklists();
-    }
-  }, [db, currentUser, groups]);
 
    const chats = useMemo(() => {
     if (!currentUser) return [];
@@ -312,8 +279,11 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     
      await addDoc(collection(db, "expenses"), {
       ...expenseData,
+      isRecurring: undefined, // remove the form-only field
+      recurring: expenseData.isRecurring ? 'monthly' : null, // convert to new recurring field
       date: new Date(),
-      isRecurring: expenseData.isRecurring || false,
+      status: 'unsettled',
+      settledAt: null,
     });
 
      // Automatically create friendships with ad-hoc users
@@ -410,22 +380,27 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   
   const settleFriendDebt = async (friendId: string) => {
     if (!currentUser || !db) throw new Error("Not authenticated or DB not initialized");
-    const q = query(
-      collection(db, "expenses"), 
-      where('splitWith', 'array-contains', currentUser.id),
-      where("groupId", "==", null)
-    );
-    const snapshot = await getDocs(q);
     const batch = writeBatch(db);
-    snapshot.forEach(doc => {
-        const expense = doc.data() as Expense;
-        const participants = new Set(expense.splitWith);
-        // Only settle 1-on-1 expenses
-        if (participants.size === 2 && participants.has(friendId)) {
-            batch.delete(doc.ref);
-        }
+    
+    // Find all unsettled, 1-on-1 expenses between the two users
+    const expensesToSettle = expenses.filter(e => 
+        e.groupId === null &&
+        e.status === 'unsettled' &&
+        e.splitWith.length === 2 &&
+        e.splitWith.includes(currentUser.id) &&
+        e.splitWith.includes(friendId)
+    );
+
+    expensesToSettle.forEach(expense => {
+        const expenseRef = doc(db, "expenses", expense.id);
+        batch.update(expenseRef, {
+            status: 'settled',
+            settledAt: serverTimestamp()
+        });
     });
+
     await batch.commit();
+
     const friend = findUserById(friendId);
     if(friend && !friend.email.endsWith('@adhoc.settlesmart.app')) {
       await sendMessage(friendId, `${currentUser.name} has marked all debts between you as settled.`, 'system');
@@ -434,10 +409,15 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   
   const settleAllInGroup = async (groupId: string) => {
     if (!db) return;
-    const q = query(collection(db, "expenses"), where("groupId", "==", groupId));
+    const q = query(collection(db, "expenses"), where("groupId", "==", groupId), where("status", "==", "unsettled"));
     const snapshot = await getDocs(q);
     const batch = writeBatch(db);
-    snapshot.forEach(doc => batch.delete(doc.ref));
+    snapshot.forEach(expenseDoc => {
+        batch.update(expenseDoc.ref, {
+            status: 'settled',
+            settledAt: serverTimestamp()
+        });
+    });
     await batch.commit();
   };
   
@@ -580,10 +560,11 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   }
 
   const calculateSettlements = useCallback((expensesToCalculate: Expense[], allParticipantIds: string[]) => {
+    const unsettledExpenses = expensesToCalculate.filter(e => e.status === 'unsettled');
     const userBalances: { [key: string]: number } = {};
     allParticipantIds.forEach(pId => userBalances[pId] = 0);
 
-    expensesToCalculate.forEach(expense => {
+    unsettledExpenses.forEach(expense => {
         const participantsInThisExpense = expense.splitWith.filter(p => allParticipantIds.includes(p));
         if (participantsInThisExpense.length === 0) return;
 
@@ -621,15 +602,17 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
       
       const groupExpenses = expenses.filter(e => e.groupId === groupId);
       const total = groupExpenses.reduce((sum, e) => sum + e.amount, 0);
+      
+      const settledExpenses = groupExpenses.filter(e => e.status === 'settled');
+      const settledAmount = settledExpenses.reduce((sum, e) => sum + e.amount, 0);
 
       const memberBalances = calculateSettlements(groupExpenses, group.members);
       
       const totalPositive = Object.values(memberBalances).filter(v => v > 0).reduce((s, v) => s + v, 0);
       const remaining = totalPositive;
-      const settled = total > 0 ? Math.max(0, total - remaining) : total;
-      const progress = total > 0 ? (settled / total) * 100 : 100;
+      const progress = total > 0 ? (settledAmount / total) * 100 : 100;
 
-      return { total, settled, remaining, progress, memberBalances };
+      return { total, settled: settledAmount, remaining, progress, memberBalances };
 
   }, [groups, expenses, calculateSettlements]);
   
@@ -701,20 +684,44 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   }, [expenses, currentUser, users, getAllParticipantsInExpenses, calculateSettlements, simplifyDebts, findUserById]);
 
   const calculateUserTrustScore = useCallback((userId: string) => {
-    const allInvolvedUserIds = [...new Set([...users.map(u => u.id), ...getAllParticipantsInExpenses])];
-    const userBalances = calculateSettlements(expenses, allInvolvedUserIds);
+      let score = 70;
 
-    const finalSettlements = simplifyDebts(userBalances);
+      const userExpenses = expenses.filter(e => e.splitWith.includes(userId));
+      if (userExpenses.length < 3) return 70; // Not enough data
 
-    const owedToUser = finalSettlements.filter(s => s.to === userId).reduce((sum, s) => sum + s.amount, 0);
-    const userOwes = finalSettlements.filter(s => s.from === userId).reduce((sum, s) => sum + s.amount, 0);
+      // Debts owed by user
+      const userDebts = userExpenses.filter(e => e.paidById !== userId);
+      const settledDebts = userDebts.filter(e => e.status === 'settled' && e.settledAt);
+      
+      if (settledDebts.length > 0) {
+        const totalRepayTime = settledDebts.reduce((sum, e) => {
+            return sum + differenceInDays(new Date(e.settledAt!), new Date(e.date));
+        }, 0);
+        const avgRepayDays = totalRepayTime / settledDebts.length;
+        
+        // Reward quick repayments
+        if (avgRepayDays <= 1) score += 15;
+        else if (avgRepayDays <= 7) score += 5;
+        else if (avgRepayDays > 30) score -= 10;
+        else if (avgRepayDays > 14) score -= 5;
+      }
 
-    let score = 70;
-    score += Math.min(20, owedToUser / 50);
-    score -= Math.min(40, userOwes / 25);
-    
-    return Math.max(0, Math.min(100, score));
-  }, [users, expenses, getAllParticipantsInExpenses, calculateSettlements, simplifyDebts]);
+      // Lending history
+      const userLent = userExpenses.filter(e => e.paidById === userId);
+      const totalLentAmount = userLent.reduce((sum, e) => sum + e.amount, 0);
+      score += Math.min(10, totalLentAmount / 500); // Bonus for being a lender
+
+      // Current outstanding debt
+      const allInvolvedUserIds = [...new Set([...users.map(u => u.id), ...getAllParticipantsInExpenses])];
+      const allBalances = calculateSettlements(expenses, allInvolvedUserIds);
+      const userBalance = allBalances[userId] || 0;
+      
+      if (userBalance < 0) { // User owes money
+          score -= Math.min(25, Math.abs(userBalance) / 100);
+      }
+
+      return Math.max(0, Math.min(100, Math.round(score)));
+  }, [expenses, users, getAllParticipantsInExpenses, calculateSettlements]);
 
 
   const value = {
