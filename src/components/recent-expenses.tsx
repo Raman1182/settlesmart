@@ -24,7 +24,11 @@ import { formatCurrency } from "@/lib/utils";
 export function RecentExpenses() {
     const { expenses, findUserById, groups, currentUser } = useSettleSmart();
 
-    const getGroupName = (groupId: string) => groups.find(g => g.id === groupId)?.name || 'N/A';
+    const getGroupName = (groupId: string | null) => {
+        if (!groupId) return 'Personal Expense';
+        return groups.find(g => g.id === groupId)?.name || 'N/A';
+    }
+
 
     return (
         <Card className="h-full">
