@@ -1,6 +1,6 @@
 import {genkit} from 'genkit';
 import {googleAI} from '@genkit-ai/googleai';
-import nextJs from '@genkit-ai/next';
+import {nextJs} from '@genkit-ai/next';
 
 import '@/ai/flows/parse-expense-from-natural-language';
 import '@/ai/flows/categorize-expense';
