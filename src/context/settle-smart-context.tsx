@@ -60,7 +60,7 @@ interface SettleSmartContextType {
   getChatMessages: (friendId: string, callback: (messages: Message[]) => void) => () => void;
   sendMessage: (receiverId: string, text: string) => Promise<void>;
   markMessageAsRead: (messageId: string) => Promise<void>;
-  addAdHocUser: (email: string) => void;
+  addAdHocUser: (name: string) => Promise<User>;
 }
 
 const SettleSmartContext = createContext<SettleSmartContextType | undefined>(undefined);
@@ -116,6 +116,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
         setExpenses([]);
         setFriendships([]);
         setGroupChecklists({});
+        setUsers([]);
         return;
     };
     
@@ -173,21 +174,31 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
         if (unsubscribeUsers) unsubscribeUsers();
     };
   }, [currentUser?.id]);
+  
+  // Memoize chatIds to prevent re-renders
+  const chatIdsString = useMemo(() => {
+    if (!currentUser?.id || friendships.length === 0) return '[]';
+    
+    const acceptedFriendships = friendships.filter(f => f.status === 'accepted');
+    if (acceptedFriendships.length === 0) return '[]';
+    
+    const chatIds = acceptedFriendships.map(f => [f.userIds[0], f.userIds[1]].sort().join('_'));
+    return JSON.stringify(chatIds.sort());
+  }, [friendships, currentUser?.id]);
+
 
   // Decoupled effect for messages
   useEffect(() => {
       if (!currentUser?.id) {
           setMessages([]);
-          return;
+          return () => {};
       }
-  
-      const acceptedFriendships = friendships.filter(f => f.status === 'accepted');
-      if (acceptedFriendships.length === 0) {
+      const chatIds = JSON.parse(chatIdsString);
+
+      if (chatIds.length === 0) {
           setMessages([]);
-          return;
+          return () => {};
       }
-      
-      const chatIds = acceptedFriendships.map(f => [f.userIds[0], f.userIds[1]].sort().join('_'));
       
       const qMessages = query(collection(db, "messages"), where("chatId", "in", chatIds), orderBy("createdAt"));
       const unsubscribeMessages = onSnapshot(qMessages, (msgSnapshot) => {
@@ -207,7 +218,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
       return () => {
           unsubscribeMessages();
       };
-  }, [currentUser?.id, friendships]);
+  }, [currentUser?.id, chatIdsString]);
 
 
   const signUp = async (email: string, pass: string) => {
@@ -309,7 +320,18 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const findUserById = useCallback((id: string) => {
       return users.find(u => u.id === id);
   }, [users]);
-
+  
+  const addAdHocUser = async (name: string): Promise<User> => {
+    const adHocUser: User = {
+        id: `adhoc_${Date.now()}_${name.replace(/\s+/g, '')}`,
+        name: name,
+        email: `${name.replace(/\s+/g, '_')}@adhoc.settlesmart.app`,
+        initials: name.charAt(0).toUpperCase(),
+        avatar: `https://placehold.co/100x100?text=${name.charAt(0).toUpperCase()}`
+    };
+    setUsers(prev => [...prev, adHocUser]);
+    return adHocUser;
+  };
 
   const addExpense = async (expenseData: AddExpenseData) => {
      if (!currentUser) throw new Error("No user found");
@@ -320,10 +342,6 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
       isRecurring: expenseData.isRecurring || false,
     });
   };
-  
-  const addAdHocUser = (email: string) => {
-    console.warn("addAdHocUser called, but not implemented for full Firestore backend.");
-  }
 
   const createGroup = async (name: string, memberEmails: string[]) => {
       if (!currentUser) throw new Error("Not authenticated");
@@ -448,6 +466,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     const all = new Set<string>();
     expenses.forEach(e => {
         e.splitWith.forEach(p => all.add(p));
+        all.add(e.paidById);
     });
     return Array.from(all);
   }, [expenses]);
@@ -585,3 +604,5 @@ export const useSettleSmart = (): SettleSmartContextType => {
   }
   return context;
 };
+
+    
