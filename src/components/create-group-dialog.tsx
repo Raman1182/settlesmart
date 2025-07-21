@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -17,10 +17,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useSettleSmart } from "@/context/settle-smart-context";
 import { useToast } from "@/components/ui/use-toast";
-import { Loader2, Plus, PlusCircle, Users, X } from "lucide-react";
+import { Loader2, Plus, Users, X } from "lucide-react";
 import { Badge } from "./ui/badge";
 
-export function CreateGroupDialog() {
+export function CreateGroupDialog({ children }: { children?: ReactNode }) {
   const [isOpen, setIsOpen] = useState(false);
   const [groupName, setGroupName] = useState("");
   const [memberEmail, setMemberEmail] = useState("");
@@ -88,10 +88,7 @@ export function CreateGroupDialog() {
         setIsOpen(open);
     }}>
       <DialogTrigger asChild>
-        <Button size="icon" variant="ghost" className="h-7 w-7">
-            <PlusCircle className="h-4 w-4" />
-            <span className="sr-only">Create Group</span>
-        </Button>
+        {children || <Button><Users className="mr-2 h-4 w-4" /> Create Group</Button>}
       </DialogTrigger>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
@@ -101,50 +98,47 @@ export function CreateGroupDialog() {
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="name" className="text-right">
+          <div className="space-y-2">
+            <Label htmlFor="name">
               Group Name
             </Label>
             <Input
               id="name"
               value={groupName}
               onChange={(e) => setGroupName(e.target.value)}
-              className="col-span-3"
               placeholder="e.g., Trip to Bali"
             />
           </div>
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="members" className="text-right">
-              Members
+          <div className="space-y-2">
+            <Label htmlFor="members">
+              Invite Members
             </Label>
-            <div className="col-span-3">
-                <div className="flex gap-2">
-                    <Input
-                    id="members"
-                    type="email"
-                    placeholder="friend@example.com"
-                    value={memberEmail}
-                    onChange={(e) => setMemberEmail(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        handleAddMember();
-                      }
-                    }}
-                    />
-                    <Button type="button" size="icon" variant="outline" onClick={handleAddMember}>
-                        <Plus className="h-4 w-4"/>
-                    </Button>
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">Add members by their email address.</p>
+            <div className="flex gap-2">
+                <Input
+                id="members"
+                type="email"
+                placeholder="friend@example.com"
+                value={memberEmail}
+                onChange={(e) => setMemberEmail(e.target.value)}
+                onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleAddMember();
+                    }
+                }}
+                />
+                <Button type="button" size="icon" variant="outline" onClick={handleAddMember}>
+                    <Plus className="h-4 w-4"/>
+                </Button>
             </div>
           </div>
-           {memberEmails.length > 0 && (
-            <div className="grid grid-cols-4 items-start gap-4">
-                <div className="text-right text-sm font-medium col-start-1 mt-2">Invited</div>
-                <div className="col-span-3 flex flex-wrap gap-2">
+           {(memberEmails.length > 0 || currentUser) && (
+            <div>
+                <Label>Members</Label>
+                <div className="flex flex-wrap gap-2 mt-2">
+                    {currentUser && <Badge variant="secondary">{currentUser.email} (You)</Badge>}
                     {memberEmails.map(email => (
-                        <Badge key={email} variant="secondary" className="flex items-center gap-1">
+                        <Badge key={email} variant="secondary" className="flex items-center gap-1 pr-1">
                             {email}
                             <button onClick={() => handleRemoveMember(email)} className="rounded-full hover:bg-muted-foreground/20 p-0.5">
                                 <X className="h-3 w-3"/>

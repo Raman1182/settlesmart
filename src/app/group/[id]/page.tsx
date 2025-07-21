@@ -12,11 +12,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
 import { Badge } from "@/components/ui/badge";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 
 export default function GroupSettingsPage() {
   const { id: groupId } = useParams();
   const router = useRouter();
-  const { groups, findUserById, currentUser, isLoading: isAuthLoading, updateGroupMembers } = useSettleSmart();
+  const { groups, findUserById, currentUser, isLoading: isAuthLoading, updateGroupMembers, deleteGroup, leaveGroup } = useSettleSmart();
   const { toast } = useToast();
 
   const [newMemberEmail, setNewMemberEmail] = useState("");
@@ -42,11 +43,13 @@ export default function GroupSettingsPage() {
         <Header pageTitle="Group Not Found" />
         <main className="flex flex-1 flex-col items-center justify-center gap-4 p-4 sm:p-6">
           <p>The group you're looking for doesn't exist or you're not a member.</p>
-          <Button onClick={() => router.push('/')}>Go to Dashboard</Button>
+          <Button onClick={() => router.push('/groups')}>Go to Groups</Button>
         </main>
       </div>
     );
   }
+  
+  const isOwner = group.createdBy === currentUser.id;
 
   const handleAddMember = () => {
     if (!newMemberEmail || groupMembers.some(m => m.email === newMemberEmail)) {
@@ -83,31 +86,57 @@ export default function GroupSettingsPage() {
     });
   };
 
+  const handleDeleteGroup = () => {
+    startUpdateTransition(async () => {
+      try {
+        await deleteGroup(group.id);
+        toast({ title: "Group Deleted" });
+        router.push('/groups');
+      } catch (error: any) {
+        toast({ variant: "destructive", title: "Error", description: error.message });
+      }
+    });
+  }
+  
+  const handleLeaveGroup = () => {
+     startUpdateTransition(async () => {
+      try {
+        await leaveGroup(group.id);
+        toast({ title: "You have left the group" });
+        router.push('/groups');
+      } catch (error: any) {
+        toast({ variant: "destructive", title: "Error", description: error.message });
+      }
+    });
+  }
+
 
   return (
     <div className="flex flex-col min-h-screen w-full">
         <Header pageTitle={`Group: ${group.name}`} />
         <main className="flex flex-1 flex-col gap-4 p-4 sm:p-6 md:gap-8 md:p-8">
-            <div className="grid gap-8 md:grid-cols-2">
-                <Card>
+            <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
+                <Card className="lg:col-span-2">
                     <CardHeader>
                         <CardTitle>Group Members</CardTitle>
-                        <CardDescription>Manage who is in this group.</CardDescription>
+                        <CardDescription>Manage who is in this group. {isOwner && "As the owner, you can add or remove members."}</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <div className="space-y-4">
-                             <div className="flex gap-2">
-                                <Input
-                                    placeholder="friend@example.com"
-                                    value={newMemberEmail}
-                                    onChange={(e) => setNewMemberEmail(e.target.value)}
-                                    disabled={isUpdating}
-                                />
-                                <Button onClick={handleAddMember} disabled={isUpdating || !newMemberEmail}>
-                                    {isUpdating ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Plus className="mr-2 h-4 w-4"/>}
-                                    Add
-                                </Button>
-                            </div>
+                            {isOwner && (
+                                <div className="flex gap-2">
+                                    <Input
+                                        placeholder="friend@example.com"
+                                        value={newMemberEmail}
+                                        onChange={(e) => setNewMemberEmail(e.target.value)}
+                                        disabled={isUpdating}
+                                    />
+                                    <Button onClick={handleAddMember} disabled={isUpdating || !newMemberEmail}>
+                                        {isUpdating ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Plus className="mr-2 h-4 w-4"/>}
+                                        Add
+                                    </Button>
+                                </div>
+                            )}
                             <div className="space-y-3">
                                 {groupMembers.map(member => (
                                     <div key={member.id} className="flex items-center justify-between">
@@ -122,7 +151,7 @@ export default function GroupSettingsPage() {
                                             </div>
                                              {member.id === group.createdBy && <Badge variant="secondary">Owner</Badge>}
                                         </div>
-                                        {member.id !== currentUser?.id && member.id !== group.createdBy && (
+                                        {isOwner && member.id !== currentUser?.id && member.id !== group.createdBy && (
                                             <Button 
                                                 variant="ghost" 
                                                 size="icon" 
@@ -145,16 +174,53 @@ export default function GroupSettingsPage() {
                         <CardDescription>Advanced settings for this group.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                        <div>
-                            <h4 className="font-medium mb-2">Leave Group</h4>
-                            <p className="text-sm text-muted-foreground mb-3">If you leave this group, you won't be able to see its expenses. This action cannot be undone.</p>
-                             <Button variant="outline" className="w-full" disabled>Leave Group</Button>
-                        </div>
-                         <div className="!mt-6">
-                            <h4 className="font-medium mb-2 text-destructive">Delete Group</h4>
-                            <p className="text-sm text-muted-foreground mb-3">Deleting the group will permanently remove all associated expenses and balances. This action cannot be undone.</p>
-                            <Button variant="destructive" className="w-full" disabled>Delete Group</Button>
-                        </div>
+                        {!isOwner && (
+                            <div>
+                                <h4 className="font-medium mb-2">Leave Group</h4>
+                                <p className="text-sm text-muted-foreground mb-3">If you leave this group, you won't be able to see its expenses. This action cannot be undone.</p>
+                                 <AlertDialog>
+                                    <AlertDialogTrigger asChild>
+                                        <Button variant="outline" className="w-full" disabled={isUpdating}>Leave Group</Button>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                        <AlertDialogHeader>
+                                        <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                            This action cannot be undone. You will be removed from the group and will lose access to its expense history.
+                                        </AlertDialogDescription>
+                                        </AlertDialogHeader>
+                                        <AlertDialogFooter>
+                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                        <AlertDialogAction onClick={handleLeaveGroup} className="bg-primary hover:bg-primary/90">Leave</AlertDialogAction>
+                                        </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                </AlertDialog>
+                            </div>
+                        )}
+                         {isOwner && (
+                             <div className="!mt-6">
+                                <h4 className="font-medium mb-2 text-destructive">Delete Group</h4>
+                                <p className="text-sm text-muted-foreground mb-3">Deleting the group will permanently remove all associated expenses and balances. This action cannot be undone.</p>
+                                 <AlertDialog>
+                                    <AlertDialogTrigger asChild>
+                                        <Button variant="destructive" className="w-full" disabled={isUpdating}>Delete Group</Button>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                        <AlertDialogHeader>
+                                        <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                            This action cannot be undone. This will permanently delete the
+                                            <span className="font-bold"> {group.name} </span> group and all of its data.
+                                        </AlertDialogDescription>
+                                        </AlertDialogHeader>
+                                        <AlertDialogFooter>
+                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                        <AlertDialogAction onClick={handleDeleteGroup}>Delete</AlertDialogAction>
+                                        </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                </AlertDialog>
+                            </div>
+                        )}
                     </CardContent>
                 </Card>
 

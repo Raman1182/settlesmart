@@ -6,7 +6,7 @@ import type { User, Group, Expense } from "@/lib/types";
 import { users as mockUsers, groups as mockGroups, expenses as mockExpenses } from '@/lib/data';
 
 interface SettleSmartContextType {
-  currentUser: User | null;
+  currentUser: User;
   isLoading: boolean;
   users: User[];
   groups: Group[];
@@ -20,12 +20,14 @@ interface SettleSmartContextType {
   findUserById: (id: string) => User | undefined;
   createGroup: (name: string, memberEmails: string[]) => Promise<void>;
   updateGroupMembers: (groupId: string, memberEmailsToAdd: string[], memberIdsToRemove: string[]) => Promise<void>;
+  deleteGroup: (groupId: string) => Promise<void>;
+  leaveGroup: (groupId: string) => Promise<void>;
 }
 
 const SettleSmartContext = createContext<SettleSmartContextType | undefined>(undefined);
 
 export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [currentUser] = useState<User>(mockUsers[0]);
   const [isLoading, setIsLoading] = useState(true);
   
   const [users, setUsers] = useState<User[]>([]);
@@ -35,20 +37,9 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   useEffect(() => {
     // Simulate loading mock data
     setIsLoading(true);
-    const loggedInUser = mockUsers[0];
-    setCurrentUser(loggedInUser);
     setUsers(mockUsers);
-    
-    // Simulate group and expense data for the current user
-    const userGroups = mockGroups.filter(g => g.members.includes(loggedInUser.id));
-    setGroups(userGroups);
-    
-    const userGroupIds = userGroups.map(g => g.id);
-    const userExpenses = mockExpenses
-      .filter(e => userGroupIds.includes(e.groupId))
-      .sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    setExpenses(userExpenses);
-    
+    setGroups(mockGroups);
+    setExpenses(mockExpenses.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
     setIsLoading(false);
   }, []);
 
@@ -69,9 +60,14 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
       const memberIds = new Set<string>([currentUser.id]);
       
       memberEmails.forEach(email => {
+        // In a real app, you'd check if these users exist and maybe invite them.
+        // For mock data, we'll find existing users or create dummy placeholders.
         const user = users.find(u => u.email === email);
         if (user) {
           memberIds.add(user.id);
+        } else {
+          // You could add logic here to create a new user or handle invites
+          console.warn(`User with email ${email} not found.`);
         }
       });
       
@@ -99,6 +95,25 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
         return group;
       }));
   };
+  
+  const deleteGroup = async (groupId: string) => {
+    setGroups(prev => prev.filter(g => g.id !== groupId));
+    // Also delete associated expenses
+    setExpenses(prev => prev.filter(e => e.groupId !== groupId));
+  };
+  
+  const leaveGroup = async (groupId: string) => {
+     if (!currentUser) throw new Error("Not authenticated");
+     setGroups(prev => prev.map(g => {
+       if (g.id === groupId) {
+         return {
+           ...g,
+           members: g.members.filter(mId => mId !== currentUser.id)
+         }
+       }
+       return g;
+     }));
+  }
 
   
   const balances = useMemo(() => {
@@ -177,6 +192,8 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     findUserById,
     createGroup,
     updateGroupMembers,
+    deleteGroup,
+    leaveGroup
   };
 
   return (

@@ -2,16 +2,14 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import {
   Bot,
-  Calculator,
-  Calendar,
   CreditCard,
   Home,
   Loader2,
   Plus,
   Settings,
-  Smile,
   User,
   Users,
 } from "lucide-react";
@@ -23,12 +21,13 @@ import {
   CommandItem,
   CommandList,
   CommandSeparator,
-  CommandShortcut,
 } from "@/components/ui/command";
 import { useSettleSmart } from "@/context/settle-smart-context";
 import { answerFinancialQuestion } from "@/ai/flows/financial-qna-flow";
+import { DialogTitle } from "@radix-ui/react-dialog";
 
 export function CommandMenu() {
+  const router = useRouter();
   const [open, setOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
   const [aiResponse, setAiResponse] = React.useState("");
@@ -47,6 +46,11 @@ export function CommandMenu() {
     document.addEventListener("keydown", down);
     return () => document.removeEventListener("keydown", down);
   }, []);
+  
+  const runCommand = (command: () => void) => {
+    setOpen(false);
+    command();
+  };
   
   const handleAiQuery = async (e: React.FormEvent<HTMLFormElement>) => {
       e.preventDefault();
@@ -69,6 +73,7 @@ export function CommandMenu() {
   return (
     <>
       <CommandDialog open={open} onOpenChange={setOpen}>
+         <DialogTitle className="sr-only">Command Menu</DialogTitle>
         <form onSubmit={handleAiQuery}>
             <CommandInput 
                 placeholder="Ask AI or type a command..."
@@ -89,24 +94,34 @@ export function CommandMenu() {
             )}
           </CommandEmpty>
 
-          <CommandGroup heading="Suggestions">
-            <CommandItem>
+          <CommandGroup heading="Navigation">
+            <CommandItem onSelect={() => runCommand(() => router.push('/'))}>
               <Home className="mr-2 h-4 w-4" />
               <span>Dashboard</span>
             </CommandItem>
-            <CommandItem>
+             <CommandItem onSelect={() => runCommand(() => router.push('/groups'))}>
+              <Users className="mr-2 h-4 w-4" />
+              <span>Groups</span>
+            </CommandItem>
+            <CommandItem disabled>
+              <User className="mr-2 h-4 w-4" />
+              <span>Friends</span>
+            </CommandItem>
+          </CommandGroup>
+           <CommandGroup heading="Actions">
+             <CommandItem disabled>
               <CreditCard className="mr-2 h-4 w-4" />
               <span>Add Expense</span>
             </CommandItem>
-            <CommandItem>
+            <CommandItem disabled>
               <Users className="mr-2 h-4 w-4" />
               <span>Create Group</span>
             </CommandItem>
-          </CommandGroup>
+           </CommandGroup>
           <CommandSeparator />
           <CommandGroup heading="Groups">
              {groups.map(group => (
-                <CommandItem key={group.id}>
+                <CommandItem key={group.id} onSelect={() => runCommand(() => router.push(`/group/${group.id}`))}>
                     <Users className="mr-2 h-4 w-4" />
                     <span>{group.name}</span>
                 </CommandItem>
