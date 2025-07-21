@@ -14,6 +14,7 @@ interface AddExpenseData {
   unequalSplits?: UnequalSplit[];
   groupId: string | null;
   category: string;
+  isRecurring: boolean;
 }
 
 interface SettleSmartContextType {
@@ -26,7 +27,7 @@ interface SettleSmartContextType {
   balances: {
     totalOwedToUser: number;
     totalOwedByUser: number;
-    settlements: { from: User | {id: string, name: string}; to: User | {id: string, name: string}; amount: number }[];
+    settlements: { from: User | {id: string, name: string, avatar?: string, initials: string}; to: User | {id: string, name: string, avatar?: string, initials: string}; amount: number }[];
   };
   getGroupBalances: (groupId: string) => { 
       total: number, 
@@ -42,6 +43,9 @@ interface SettleSmartContextType {
   leaveGroup: (groupId: string) => Promise<void>;
   groupChecklists: { [groupId: string]: ChecklistItem[] };
   updateGroupChecklist: (groupId: string, items: ChecklistItem[]) => void;
+  settleFriendDebt: (friendId: string) => Promise<void>;
+  simplifyGroupDebts: (groupId: string) => { from: User, to: User, amount: number }[];
+  settleAllInGroup: (groupId: string) => void;
 }
 
 const SettleSmartContext = createContext<SettleSmartContextType | undefined>(undefined);
@@ -149,6 +153,22 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
         [groupId]: items,
     }));
   };
+  
+  const settleFriendDebt = async (friendId: string) => {
+    if (!currentUser) throw new Error("Not authenticated");
+    const expensesToSettle = expenses.filter(e => 
+        (e.paidById === currentUser.id && e.splitWith.includes(friendId)) ||
+        (e.paidById === friendId && e.splitWith.includes(currentUser.id))
+    );
+    // In a real app, this would be more complex, likely creating a settlement transaction.
+    // For this mock implementation, we'll just remove the expenses between these two users.
+    setExpenses(prev => prev.filter(e => !expensesToSettle.find(es => es.id === e.id)));
+  }
+  
+  const settleAllInGroup = (groupId: string) => {
+    // This simply removes all expenses associated with the group to clear the balance.
+    setExpenses(prev => prev.filter(e => e.groupId !== groupId));
+  };
 
   const calculateSettlements = useCallback((expensesToCalculate: Expense[], allParticipants: Participant[]) => {
     const userBalances: { [key: string]: number } = {};
@@ -196,44 +216,61 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
       
       const totalPositive = Object.values(memberBalances).filter(v => v > 0).reduce((s, v) => s + v, 0);
       const remaining = totalPositive;
-      const settled = total > 0 ? total - remaining : 0;
+      const settled = total > 0 ? Math.max(0, total - remaining) : total;
       const progress = total > 0 ? (settled / total) * 100 : 100;
 
       return { total, settled, remaining, progress, memberBalances };
 
   }, [groups, expenses, calculateSettlements]);
   
+    const simplifyDebts = useCallback((userBalances: { [key: string]: number }) => {
+        const settlements: { from: string, to: string, amount: number }[] = [];
+        const payers = Object.entries(userBalances).filter(([,amount]) => amount > 0.01);
+        const owers = Object.entries(userBalances).filter(([,amount]) => amount < -0.01);
+
+        payers.sort((a, b) => a[1] - b[1]);
+        owers.sort((a, b) => a[1] - b[1]);
+
+        let i = 0, j = 0;
+        while (i < payers.length && j < owers.length) {
+            const [payerId, credit] = payers[i];
+            const [owerId, debt] = owers[j];
+            const settlementAmount = Math.min(credit, -debt);
+
+            if (settlementAmount > 0.01) {
+                settlements.push({ from: owerId, to: payerId, amount: settlementAmount });
+                payers[i][1] -= settlementAmount;
+                owers[j][1] += settlementAmount;
+            }
+
+            if (payers[i][1] < 0.01) i++;
+            if (owers[j][1] > -0.01) j++;
+        }
+        return settlements;
+    }, []);
+
+    const simplifyGroupDebts = useCallback((groupId: string) => {
+        const group = groups.find(g => g.id === groupId);
+        if (!group) return [];
+        const groupExpenses = expenses.filter(e => e.groupId === groupId);
+        const memberBalances = calculateSettlements(groupExpenses, group.members);
+        
+        return simplifyDebts(memberBalances)
+            .map(s => {
+                const fromUser = findUserById(s.from);
+                const toUser = findUserById(s.to);
+                if (!fromUser || !toUser) return null;
+                return { from: fromUser, to: toUser, amount: s.amount };
+            })
+            .filter(Boolean) as { from: User, to: User, amount: number }[];
+    }, [groups, expenses, calculateSettlements, simplifyDebts, findUserById]);
+  
   const balances = useMemo(() => {
     if (!currentUser) {
         return { totalOwedToUser: 0, totalOwedByUser: 0, settlements: [] };
     }
     const userBalances = calculateSettlements(expenses, getAllParticipants);
-
-    const settlements: { from: string, to: string, amount: number }[] = [];
-    const payers = Object.keys(userBalances).filter(id => userBalances[id] > 0.01);
-    const owers = Object.keys(userBalances).filter(id => userBalances[id] < -0.01);
-
-    let i = 0, j = 0;
-    while (i < payers.length && j < owers.length) {
-        const payerId = payers[i];
-        const owerId = owers[j];
-        const credit = userBalances[payerId];
-        const debt = -userBalances[owerId];
-
-        const settlementAmount = Math.min(credit, debt);
-
-        if (settlementAmount > 0.01) { 
-            settlements.push({ from: owerId, to: payerId, amount: settlementAmount });
-
-            userBalances[payerId] -= settlementAmount;
-            userBalances[owerId] += settlementAmount;
-        }
-
-        if (userBalances[payerId] < 0.01) i++;
-        if (userBalances[owerId] > -0.01) j++;
-    }
-
-    const finalSettlements = settlements
+    const finalSettlements = simplifyDebts(userBalances)
         .map(debt => {
             const fromUser = findUserById(debt.from);
             const toUser = findUserById(debt.to);
@@ -249,7 +286,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
       totalOwedByUser: finalSettlements.filter(s => s.from?.id === currentUser?.id).reduce((sum, s) => sum + s.amount, 0),
       settlements: finalSettlements
     };
-  }, [expenses, currentUser, findUserById, calculateSettlements, getAllParticipants]);
+  }, [expenses, currentUser, findUserById, calculateSettlements, getAllParticipants, simplifyDebts]);
 
 
   const value = {
@@ -268,6 +305,9 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     leaveGroup,
     groupChecklists,
     updateGroupChecklist,
+    settleFriendDebt,
+    simplifyGroupDebts,
+    settleAllInGroup,
   };
 
   return (

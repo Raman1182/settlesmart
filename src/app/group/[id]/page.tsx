@@ -1,11 +1,11 @@
 
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useSettleSmart } from "@/context/settle-smart-context";
 import { Header } from "@/components/header";
-import { Loader2, Users, ArrowLeft, Settings } from "lucide-react";
+import { Loader2, Users, ArrowLeft, Settings, Trash2, LogOut, Loader, ArrowRight } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -15,18 +15,49 @@ import { GroupExpenses } from "@/components/group-expenses";
 import { GroupStats } from "@/components/group-stats";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { GroupChecklist } from "@/components/group-checklist";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { useToast } from "@/components/ui/use-toast";
+import type { User, Group } from "@/lib/types";
+import { formatCurrency } from "@/lib/utils";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 
 export default function GroupDetailsPage() {
   const { id: groupId } = useParams();
   const router = useRouter();
-  const { groups, findUserById, currentUser, isLoading: isAuthLoading, getGroupBalances } = useSettleSmart();
+  const { groups, findUserById, currentUser, isLoading: isAuthLoading, getGroupBalances, deleteGroup, leaveGroup, simplifyGroupDebts, settleAllInGroup } = useSettleSmart();
+  const { toast } = useToast();
+  const [isDeleting, startDeleteTransition] = useTransition();
 
   const group = useMemo(() => groups.find(g => g.id === groupId), [groups, groupId]);
 
   const groupBalances = useMemo(() => {
-    if (!group) return { total: 0, settled: 0, progress: 0, remaining: 0 };
+    if (!group) return { total: 0, settled: 0, progress: 0, remaining: 0, memberBalances: {} };
     return getGroupBalances(group.id);
   }, [group, getGroupBalances]);
+  
+  const simplifiedDebts = useMemo(() => {
+    if (!group) return [];
+    return simplifyGroupDebts(group.id);
+  }, [group, simplifyGroupDebts]);
+
+  const handleDeleteGroup = () => {
+    if (!group) return;
+    startDeleteTransition(async () => {
+      try {
+        await deleteGroup(group.id);
+        toast({ title: "Group Deleted", description: `The "${group.name}" group has been permanently deleted.` });
+        router.push('/groups');
+      } catch (error: any) {
+        toast({ variant: "destructive", title: "Error", description: error.message });
+      }
+    });
+  }
+
+  const handleSettleAll = () => {
+    if (!group) return;
+    settleAllInGroup(group.id);
+    toast({ title: "All Settled!", description: `All debts in ${group.name} have been cleared.` });
+  }
   
   if (isAuthLoading || !currentUser) {
     return (
@@ -51,7 +82,6 @@ export default function GroupDetailsPage() {
   const isOwner = group.createdBy === currentUser.id;
 
   return (
-    <AlertDialog>
       <div className="flex flex-col min-h-screen w-full">
           <Header pageTitle={group.name} />
           <main className="flex flex-1 flex-col gap-4 p-4 sm:p-6 md:gap-8 md:p-8">
@@ -63,9 +93,47 @@ export default function GroupDetailsPage() {
                       <Users className="h-6 w-6 text-primary" />
                   </div>
                   <h1 className="text-xl md:text-2xl font-bold flex-1">{group.name}</h1>
-                  <Button variant="ghost" size="icon" disabled>
-                      <Settings className="h-5 w-5" />
-                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon">
+                            <Settings className="h-5 w-5" />
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                        {isOwner && (
+                            <>
+                            <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                    <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+                                        <Trash2 className="mr-2 h-4 w-4 text-destructive" />
+                                        <span className="text-destructive">Delete Group</span>
+                                    </DropdownMenuItem>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                        <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                            This action cannot be undone. This will permanently delete the <strong>{group.name}</strong> group and all of its expenses.
+                                        </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                        <AlertDialogAction onClick={handleDeleteGroup} className="bg-destructive hover:bg-destructive/90">
+                                            {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                            Yes, delete it
+                                        </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                </AlertDialogContent>
+                             </AlertDialog>
+                             <DropdownMenuSeparator />
+                            </>
+                        )}
+                        <DropdownMenuItem disabled>
+                            <LogOut className="mr-2 h-4 w-4" />
+                            <span>Leave Group</span>
+                        </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
               </div>
 
               <Card className="border-primary/20 shadow-primary/10">
@@ -82,10 +150,65 @@ export default function GroupDetailsPage() {
                           </div>
                       </div>
                       <div className="mt-6 flex gap-2">
-                          <AlertDialogTrigger asChild>
-                              <Button className="w-full">Simplify Debts</Button>
-                          </AlertDialogTrigger>
-                          <Button variant="outline" className="w-full" disabled>Settle All</Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                                <Button className="w-full">Simplify Debts</Button>
+                            </AlertDialogTrigger>
+                             <AlertDialogContent>
+                                <AlertDialogHeader>
+                                <AlertDialogTitle>Simplified Group Debts</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                    Here are the minimum number of payments needed for everyone to settle up.
+                                </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <div className="space-y-4 py-4">
+                                    {simplifiedDebts.length === 0 && <p className="text-center text-muted-foreground">Everyone is settled up!</p>}
+                                    {simplifiedDebts.map((s, i) => (
+                                        <div key={i} className="flex items-center justify-between text-sm">
+                                            <div className="flex items-center gap-2">
+                                                <Avatar className="h-8 w-8">
+                                                    <AvatarImage src={s.from.avatar} />
+                                                    <AvatarFallback>{s.from.initials}</AvatarFallback>
+                                                </Avatar>
+                                                <span>{s.from.name}</span>
+                                            </div>
+                                            <div className="flex items-center gap-2 text-primary font-mono">
+                                                <ArrowRight className="h-4 w-4" />
+                                                <span>{formatCurrency(s.amount)}</span>
+                                                <ArrowRight className="h-4 w-4" />
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <Avatar className="h-8 w-8">
+                                                    <AvatarImage src={s.to.avatar} />
+                                                    <AvatarFallback>{s.to.initials}</AvatarFallback>
+                                                </Avatar>
+                                                <span>{s.to.name}</span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                                <AlertDialogFooter>
+                                    <AlertDialogCancel>Close</AlertDialogCancel>
+                                </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                               <Button variant="outline" className="w-full">Settle All</Button>
+                            </AlertDialogTrigger>
+                             <AlertDialogContent>
+                                <AlertDialogHeader>
+                                <AlertDialogTitle>Settle all debts in {group.name}?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                    This will mark all outstanding balances in this group as zero. This assumes all members have paid each other offline. This action cannot be undone.
+                                </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                    <AlertDialogAction onClick={handleSettleAll}>Confirm & Settle All</AlertDialogAction>
+                                </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
                       </div>
                   </CardContent>
               </Card>
@@ -112,18 +235,5 @@ export default function GroupDetailsPage() {
               </Tabs>
           </main>
         </div>
-        <AlertDialogContent>
-            <AlertDialogHeader>
-            <AlertDialogTitle>Simplify Group Debts?</AlertDialogTitle>
-            <AlertDialogDescription>
-                This feature is coming soon! It will calculate the minimum number of payments needed for everyone in the group to settle up their balances.
-            </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction>Got it</AlertDialogAction>
-            </AlertDialogFooter>
-        </AlertDialogContent>
-      </div>
   );
 }

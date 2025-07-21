@@ -1,16 +1,17 @@
 
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { Header } from "@/components/header";
 import { useSettleSmart } from "@/context/settle-smart-context";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/utils";
-import { ArrowLeftRight, Shield } from "lucide-react";
+import { ArrowLeftRight, Loader2 } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import type { User } from "@/lib/types";
+import { useToast } from "@/components/ui/use-toast";
 
 interface FriendWithBalance {
     id: string;
@@ -23,8 +24,10 @@ interface FriendWithBalance {
 
 
 export default function FriendsPage() {
-  const { users, currentUser, balances } = useSettleSmart();
+  const { users, currentUser, balances, settleFriendDebt } = useSettleSmart();
+  const { toast } = useToast();
   const [settleFriend, setSettleFriend] = useState<FriendWithBalance | null>(null);
+  const [isSettling, startSettleTransition] = useTransition();
 
   const friendsWithBalances = useMemo(() => {
     const friendMap: Map<string, FriendWithBalance> = new Map();
@@ -79,10 +82,29 @@ export default function FriendsPage() {
     });
 
     return Array.from(friendMap.values())
-      .filter(f => f.balance !== 0) // Only show friends with an outstanding balance
+      .filter(f => Math.abs(f.balance) > 0.01) // Only show friends with an outstanding balance
       .sort((a, b) => Math.abs(b.balance) - Math.abs(a.balance));
 
   }, [users, currentUser, balances]);
+  
+  const handleSettle = () => {
+    if (!settleFriend) return;
+    startSettleTransition(async () => {
+        try {
+            await settleFriendDebt(settleFriend.id);
+            toast({
+                title: `Settled with ${settleFriend.name}!`,
+                description: "Your balance is now clear."
+            });
+        } catch(error: any) {
+             toast({
+                variant: "destructive",
+                title: "Error settling up",
+                description: error.message,
+            });
+        }
+    });
+  }
 
   return (
     <AlertDialog>
@@ -117,10 +139,6 @@ export default function FriendsPage() {
                           Settle Up
                       </Button>
                    </AlertDialogTrigger>
-                  <div className="flex items-center text-xs text-muted-foreground gap-1 pt-2">
-                      <Shield className="h-4 w-4 text-primary/50" />
-                      <span>Trust Score: Coming Soon</span>
-                  </div>
                 </CardFooter>
               </Card>
             ))}
@@ -137,12 +155,15 @@ export default function FriendsPage() {
           <AlertDialogHeader>
           <AlertDialogTitle>Settle with {settleFriend?.name}?</AlertDialogTitle>
           <AlertDialogDescription>
-              This will mark your balance of {formatCurrency(Math.abs(settleFriend?.balance || 0))} with {settleFriend?.name} as settled. This action assumes an offline payment was made.
+              This will mark your balance of {formatCurrency(Math.abs(settleFriend?.balance || 0))} with {settleFriend?.name} as settled. This action assumes an offline payment was made and will remove the debt from the system.
           </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction>Confirm Settlement</AlertDialogAction>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleSettle} disabled={isSettling}>
+                {isSettling && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Confirm Settlement
+            </AlertDialogAction>
           </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

@@ -43,30 +43,6 @@ export default function InsightsPage() {
                     </Card>
                  </div>
                  <SpendingOverTimeChart />
-                 <Card>
-                    <CardHeader>
-                        <CardTitle>Budget Goals</CardTitle>
-                        <CardDescription>Set and track your monthly spending goals.</CardDescription>
-                    </CardHeader>
-                     <CardContent>
-                        <div className="space-y-6">
-                            <div className="flex flex-col gap-4">
-                               <div className="flex items-center gap-2">
-                                 <Target className="h-6 w-6 text-primary" />
-                                 <span className="font-semibold">Food & Drink</span>
-                               </div>
-                               <Progress value={75} className="h-3"/>
-                               <div className="flex justify-between items-center text-sm">
-                                  <span className="text-muted-foreground">Spent: {formatCurrency(375)}</span>
-                                  <span className="text-muted-foreground">Budget: {formatCurrency(500)}</span>
-                               </div>
-                            </div>
-                             <div className="flex items-center justify-center text-center text-muted-foreground p-4 border border-dashed rounded-lg">
-                                <p>Budgeting features are coming soon!</p>
-                            </div>
-                        </div>
-                    </CardContent>
-                 </Card>
             </main>
         </div>
     );

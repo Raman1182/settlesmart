@@ -58,6 +58,7 @@ const expenseFormSchema = z.object({
   splitType: z.enum(['equally', 'unequally']).default('equally'),
   unequalSplits: z.array(splitSchema).optional(),
   groupId: z.string().optional(),
+  isRecurring: z.boolean().default(false),
 }).refine(data => {
     if (data.splitType === 'unequally') {
         const totalSplit = data.unequalSplits?.reduce((sum, s) => sum + (s.amount || 0), 0) ?? 0;
@@ -100,6 +101,7 @@ export function AddExpenseSheet({ children, open, onOpenChange }: AddExpenseShee
       splitType: 'equally',
       unequalSplits: [],
       groupId: "",
+      isRecurring: false,
     },
   });
   
@@ -122,7 +124,8 @@ export function AddExpenseSheet({ children, open, onOpenChange }: AddExpenseShee
         splitWith: [currentUser.id],
         groupId: "",
         splitType: 'equally',
-        unequalSplits: []
+        unequalSplits: [],
+        isRecurring: false,
       });
     }
   }, [currentUser, controlledOpen, form]);
@@ -236,8 +239,13 @@ export function AddExpenseSheet({ children, open, onOpenChange }: AddExpenseShee
         }
     });
     
+    // Always ensure current user is an option if not in the group
+    if (currentUser && !addedIds.has(currentUser.id)) {
+        addParticipant(currentUser);
+    }
+    
     return participantList;
-  }, [selectedGroupId, groups, findUserById, splitWith, adHocParticipants]);
+  }, [selectedGroupId, groups, findUserById, splitWith, adHocParticipants, currentUser]);
 
   const payerOptions = useMemo(() => {
     return participantsToDisplay.filter(p => !('isAdHoc' in p)) as User[];
@@ -258,7 +266,8 @@ export function AddExpenseSheet({ children, open, onOpenChange }: AddExpenseShee
         splitWith: currentUser ? [currentUser.id] : [],
         groupId: "",
         splitType: 'equally',
-        unequalSplits: []
+        unequalSplits: [],
+        isRecurring: false,
       });
       setNlInput("");
       setAdHocParticipants([]);
@@ -530,11 +539,28 @@ export function AddExpenseSheet({ children, open, onOpenChange }: AddExpenseShee
                 </div>
             )}
             
-            <div className="flex items-center space-x-2">
-                <Switch id="recurring-expense" disabled />
-                <Label htmlFor="recurring-expense" className="text-muted-foreground">Make this a recurring expense (coming soon)</Label>
-            </div>
-
+            <FormField
+              control={form.control}
+              name="isRecurring"
+              render={({ field }) => (
+                <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                  <div className="space-y-0.5">
+                    <FormLabel className="text-base">
+                      Recurring Expense
+                    </FormLabel>
+                    <FormDescription>
+                      Is this a recurring expense, like rent or a subscription?
+                    </FormDescription>
+                  </div>
+                  <FormControl>
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                    />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
 
             </div>
 
