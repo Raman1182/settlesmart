@@ -11,7 +11,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Loader2, Send, ArrowLeft } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
-import type { Message } from '@/lib/types';
+import type { Message, User } from '@/lib/types';
 import { format } from 'date-fns';
 
 export default function ChatPage() {
@@ -23,24 +23,38 @@ export default function ChatPage() {
   const [isSending, setIsSending] = useState(false);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
-  const friend = findUserById(friendId);
+  const [friend, setFriend] = useState<User | undefined>();
+
+  useEffect(() => {
+    if (friendId) {
+      setFriend(findUserById(friendId));
+    }
+  }, [friendId, findUserById]);
+  
   const isFriend = friendships.some(f => f.status === 'accepted' && f.userIds.includes(friendId));
 
   useEffect(() => {
     if (isLoading || !currentUser) return;
-    if (!friend || !isFriend) {
-      router.replace('/friends');
-      return;
+    if (!friendId) {
+        router.replace('/friends');
+        return;
+    }
+    if(!friend && !isLoading) {
+        // Friend not found after loading, maybe redirect
     }
 
-    const unsubscribe = getChatMessages(friendId, (chatMessages) => {
-      setMessages(chatMessages);
-    });
+    const unsubscribe = getChatMessages(friendId, setMessages);
 
     return () => {
         if(unsubscribe) unsubscribe();
     };
-  }, [friendId, currentUser, isLoading, friend, router, getChatMessages, isFriend]);
+  }, [friendId, currentUser, isLoading, router, getChatMessages]);
+
+  useEffect(() => {
+    if (!isLoading && friendId && !isFriend) {
+        router.replace('/friends');
+    }
+  }, [isLoading, friendId, isFriend, router]);
 
   useEffect(() => {
     // Scroll to bottom when new messages arrive
@@ -149,3 +163,5 @@ export default function ChatPage() {
     </div>
   );
 }
+
+    

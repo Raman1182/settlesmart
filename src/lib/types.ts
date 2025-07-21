@@ -51,7 +51,7 @@ export interface ChecklistItem {
 
 export interface Message {
   id: string;
-  chatId: string | string[]; // Can be array from firestore or joined string
+  chatId: string;
   senderId: string;
   text: string;
   read: boolean;
@@ -64,3 +64,5 @@ export interface Friendship {
     status: 'pending' | 'accepted' | 'rejected';
     requestedBy: string;
 }
+
+    

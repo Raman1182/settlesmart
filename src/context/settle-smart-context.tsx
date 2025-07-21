@@ -86,12 +86,14 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
             if (userSnap.exists()) {
                 setCurrentUser({ id: user.uid, ...userSnap.data() } as User);
             } else {
+                 const name = user.email!.split('@')[0] || 'New User';
+                 const initials = name.charAt(0).toUpperCase();
                  const newUserRecord: User = {
                     id: user.uid,
                     email: user.email!,
-                    name: user.email!.split('@')[0] || 'New User',
-                    avatar: `https://placehold.co/100x100?text=${user.email!.charAt(0).toUpperCase()}`,
-                    initials: user.email!.charAt(0).toUpperCase(),
+                    name: name,
+                    avatar: `https://placehold.co/100x100?text=${initials}`,
+                    initials: initials,
                 };
                 await setDoc(userRef, { email: newUserRecord.email, name: newUserRecord.name, avatar: newUserRecord.avatar, initials: newUserRecord.initials });
                 setCurrentUser(newUserRecord);
@@ -174,26 +176,34 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
         setFriendships(userFriendships);
     });
 
-    const qMessages = query(collection(db, "messages"), where("chatId", "array-contains", currentUserId), orderBy("createdAt"));
-    const unsubscribeMessages = onSnapshot(qMessages, (msgSnapshot) => {
-          const receivedMessages: Message[] = msgSnapshot.docs.map(doc => {
-            const data = doc.data();
-            return {
-                id: doc.id,
-                ...data,
-                chatId: data.chatId.join('_'),
-                createdAt: data.createdAt?.toDate().toISOString() || new Date().toISOString()
-            } as Message
-          });
-          setMessages(receivedMessages);
-    });
+    const chatIds = friendships
+      .filter(f => f.status === 'accepted')
+      .map(f => [f.userIds[0], f.userIds[1]].sort().join('_'));
+
+    let unsubscribeMessages = () => {};
+    if (chatIds.length > 0) {
+        const qMessages = query(collection(db, "messages"), where("chatId", "in", chatIds), orderBy("createdAt"));
+        unsubscribeMessages = onSnapshot(qMessages, (msgSnapshot) => {
+            const receivedMessages: Message[] = msgSnapshot.docs.map(doc => {
+                const data = doc.data();
+                return {
+                    id: doc.id,
+                    ...data,
+                    createdAt: data.createdAt?.toDate().toISOString() || new Date().toISOString()
+                } as Message
+            });
+            setMessages(receivedMessages);
+        });
+    } else {
+        setMessages([]);
+    }
     
     return () => {
-        unsubscribeGroups();
-        unsubscribeFriendships();
-        unsubscribeMessages();
+        if (unsubscribeGroups) unsubscribeGroups();
+        if (unsubscribeFriendships) unsubscribeFriendships();
+        if (unsubscribeMessages) unsubscribeMessages();
     };
-  }, [currentUser?.id]);
+  }, [currentUser?.id, friendships]);
 
 
   const signUp = async (email: string, pass: string) => {
@@ -225,7 +235,8 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     }
 
     const friendshipsRef = collection(db, 'friendships');
-    const existingQuery = query(friendshipsRef, where('userIds', 'in', [[currentUser.id, toUser.id], [toUser.id, currentUser.id]]));
+    const userIds = [currentUser.id, toUser.id].sort();
+    const existingQuery = query(friendshipsRef, where('userIds', '==', userIds));
     const existingSnapshot = await getDocs(existingQuery);
 
     if (!existingSnapshot.empty) {
@@ -233,7 +244,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     }
 
     await addDoc(friendshipsRef, {
-      userIds: [currentUser.id, toUser.id],
+      userIds: userIds,
       status: 'pending',
       requestedBy: currentUser.id,
       createdAt: serverTimestamp(),
@@ -253,7 +264,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
    const getChatMessages = (friendId: string, callback: (messages: Message[]) => void) => {
     if (!currentUser) return () => {};
 
-    const chatId = [currentUser.id, friendId].sort();
+    const chatId = [currentUser.id, friendId].sort().join('_');
     
     const q = query(
         collection(db, "messages"), 
@@ -275,7 +286,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
   const sendMessage = async (receiverId: string, text: string) => {
     if (!currentUser) throw new Error("Not authenticated");
-    const chatId = [currentUser.id, receiverId].sort();
+    const chatId = [currentUser.id, receiverId].sort().join('_');
     
     await addDoc(collection(db, "messages"), {
       chatId: chatId, 
@@ -307,7 +318,6 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   };
   
   const addAdHocUser = (email: string) => {
-    // This function is less relevant with a full user DB but can be kept for future non-registered user features
     console.warn("addAdHocUser called, but not implemented for full Firestore backend.");
   }
 
@@ -316,14 +326,16 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
       
       const memberIds = new Set<string>([currentUser.id]);
       
-      const userQueries = memberEmails.map(email => query(collection(db, "users"), where("email", "==", email)));
-      const userSnapshots = await Promise.all(userQueries.map(q => getDocs(q)));
+      if(memberEmails.length > 0) {
+          const userQueries = memberEmails.map(email => query(collection(db, "users"), where("email", "==", email)));
+          const userSnapshots = await Promise.all(userQueries.map(q => getDocs(q)));
 
-      userSnapshots.forEach(snap => {
-        if (!snap.empty) {
-            memberIds.add(snap.docs[0].id);
-        }
-      });
+          userSnapshots.forEach(snap => {
+            if (!snap.empty) {
+                memberIds.add(snap.docs[0].id);
+            }
+          });
+      }
       
       await addDoc(collection(db, "groups"), {
         name,
@@ -569,3 +581,5 @@ export const useSettleSmart = (): SettleSmartContextType => {
   }
   return context;
 };
+
+    
