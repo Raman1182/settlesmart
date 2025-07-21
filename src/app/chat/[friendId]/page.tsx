@@ -34,21 +34,21 @@ export default function ChatPage() {
   const isFriend = friendships.some(f => f.status === 'accepted' && f.userIds.includes(friendId));
 
   useEffect(() => {
-    if (isAuthLoading || !currentUser) return;
-    if (!friendId) {
-        router.replace('/friends');
-        return;
+    // Defensively guard the effect to ensure all dependencies are ready
+    if (isAuthLoading || !currentUser || !friendId || !isFriend) {
+      return;
     }
-    if(!friend && !isAuthLoading) {
-        // Friend not found after loading, maybe redirect
-    }
-
+    
+    // Call getChatMessages which now has internal checks
     const unsubscribe = getChatMessages(friendId, setMessages);
 
+    // Return the cleanup function
     return () => {
-        if(unsubscribe) unsubscribe();
+        if(unsubscribe) {
+          unsubscribe();
+        }
     };
-  }, [friendId, currentUser, isAuthLoading, router, getChatMessages, friend]);
+  }, [friendId, currentUser, isAuthLoading, isFriend, getChatMessages]);
 
   useEffect(() => {
     if (!isAuthLoading && friendId && !isFriend) {

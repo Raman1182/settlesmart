@@ -316,7 +316,15 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   }
   
    const getChatMessages = (friendId: string, callback: (messages: Message[]) => void) => {
-    if (!currentUser || !db) return () => {};
+    // Sanity check inputs to prevent invalid queries
+    if (!currentUser?.id || !friendId || !db) {
+        console.error("getChatMessages failed: currentUser, friendId, or db is not available.", {
+            hasCurrentUser: !!currentUser?.id,
+            hasFriendId: !!friendId,
+            hasDb: !!db,
+        });
+        return () => {}; // Return a no-op cleanup function
+    }
 
     const chatId = [currentUser.id, friendId].sort().join('_');
     
@@ -333,9 +341,11 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
             createdAt: doc.data().createdAt?.toDate().toISOString() || new Date().toISOString(),
         } as Message));
         callback(chatMessages);
+    }, (error) => {
+        console.error(`Firestore listener error for chatID ${chatId}:`, error);
     });
     
-    return unsubscribe;
+    return unsubscribe; // Return the actual unsubscribe function from onSnapshot
   };
 
   const sendMessage = async (receiverId: string, text: string) => {
