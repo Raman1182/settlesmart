@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/utils";
-import { ArrowLeftRight, Loader2 } from "lucide-react";
+import { ArrowLeftRight, Loader2, MessageSquare } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import type { User } from "@/lib/types";
 import { useToast } from "@/components/ui/use-toast";
@@ -33,7 +33,7 @@ export default function FriendsPage() {
   const friendsWithBalances = useMemo(() => {
     const friendMap: Map<string, FriendWithBalance> = new Map();
 
-    // Initialize map with all known users first to get their full details
+    // Initialize map with all known users (except current user) to create a full contact list
     users.forEach(u => {
         if (u.id !== currentUser.id) {
             friendMap.set(u.id, {
@@ -47,6 +47,7 @@ export default function FriendsPage() {
         }
     });
     
+    // Now, calculate balances for each friend based on settlements
     balances.settlements.forEach(s => {
       let friend: FriendWithBalance | undefined;
       let friendId: string | undefined;
@@ -61,7 +62,7 @@ export default function FriendsPage() {
       if (friendId) {
         friend = friendMap.get(friendId);
 
-        // If friend doesn't exist (ad-hoc user), create a record for them
+        // This case handles ad-hoc users who might not be in the main user list
         if (!friend) {
             const participant = s.from.id === friendId ? s.from : s.to;
             friend = {
@@ -81,10 +82,17 @@ export default function FriendsPage() {
         }
       }
     });
-
+    
+    // Return all users, now with their calculated balances
     return Array.from(friendMap.values())
-      .filter(f => Math.abs(f.balance) > 0.01) // Only show friends with an outstanding balance
-      .sort((a, b) => Math.abs(b.balance) - Math.abs(a.balance));
+      .sort((a, b) => {
+        // Sort by who has a balance first, then alphabetically
+        const aHasBalance = Math.abs(a.balance) > 0.01;
+        const bHasBalance = Math.abs(b.balance) > 0.01;
+        if (aHasBalance && !bHasBalance) return -1;
+        if (!aHasBalance && bHasBalance) return 1;
+        return a.name.localeCompare(b.name);
+      });
 
   }, [users, currentUser, balances]);
   
@@ -147,24 +155,28 @@ export default function FriendsPage() {
                      {formatCurrency(Math.abs(friend.balance))}
                    </div>
                    <div className="text-sm text-muted-foreground">
-                      {friend.balance > 0 ? `owes you` : friend.balance < 0 ? `you owe` : 'Settled up'}
+                      {friend.balance > 0.01 ? `owes you` : friend.balance < -0.01 ? `you owe` : 'Settled up'}
                    </div>
                    <TrustScoreIndicator score={getTrustScore(friend.balance)} />
                 </CardContent>
                 <CardFooter className="flex flex-col gap-2">
                    <AlertDialogTrigger asChild>
-                      <Button className="w-full" disabled={friend.balance === 0} onClick={() => setSettleFriend(friend)}>
+                      <Button className="w-full" disabled={Math.abs(friend.balance) < 0.01} onClick={() => setSettleFriend(friend)}>
                           <ArrowLeftRight className="mr-2 h-4 w-4" />
                           Settle Up
                       </Button>
                    </AlertDialogTrigger>
+                   <Button variant="outline" className="w-full" disabled>
+                     <MessageSquare className="mr-2 h-4 w-4" />
+                     Message
+                   </Button>
                 </CardFooter>
               </Card>
             ))}
              {friendsWithBalances.length === 0 && (
                   <div className="col-span-full flex flex-col items-center justify-center text-center text-muted-foreground h-full rounded-lg border-2 border-dashed border-muted/50 py-12">
-                      <h3 className="text-xl font-bold mb-2">All square!</h3>
-                      <p className="mb-4">You have no outstanding balances with any friends.</p>
+                      <h3 className="text-xl font-bold mb-2">No friends yet</h3>
+                      <p className="mb-4">Add expenses with new people to see them here.</p>
                   </div>
               )}
           </div>
