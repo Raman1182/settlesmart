@@ -25,10 +25,12 @@ import {
 import { useSettleSmart } from "@/context/settle-smart-context";
 import { answerFinancialQuestion } from "@/ai/flows/financial-qna-flow";
 import { DialogTitle } from "@radix-ui/react-dialog";
+import { AddExpenseSheet } from "./add-expense-sheet";
 
 export function CommandMenu() {
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
+  const [addExpenseOpen, setAddExpenseOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
   const [aiResponse, setAiResponse] = React.useState("");
   const [isThinking, setIsThinking] = React.useState(false);
@@ -109,7 +111,7 @@ export function CommandMenu() {
             </CommandItem>
           </CommandGroup>
            <CommandGroup heading="Actions">
-             <CommandItem disabled>
+             <CommandItem onSelect={() => runCommand(() => setAddExpenseOpen(true))}>
               <CreditCard className="mr-2 h-4 w-4" />
               <span>Add Expense</span>
             </CommandItem>
@@ -129,6 +131,7 @@ export function CommandMenu() {
           </CommandGroup>
         </CommandList>
       </CommandDialog>
+      <AddExpenseSheet open={addExpenseOpen} onOpenChange={setAddExpenseOpen} />
     </>
   );
 }

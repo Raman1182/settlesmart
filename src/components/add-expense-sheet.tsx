@@ -35,6 +35,7 @@ import { Checkbox } from "./ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 import type { User } from "@/lib/types";
+import { SheetTrigger } from "./ui/sheet";
 
 const expenseFormSchema = z.object({
   description: z.string().min(2, {
@@ -48,13 +49,22 @@ const expenseFormSchema = z.object({
   groupId: z.string().nonempty({ message: "Please select a group." }),
 });
 
-export function AddExpenseSheet({ children }: { children?: React.ReactNode }) {
-  const [isOpen, setIsOpen] = useState(false);
+interface AddExpenseSheetProps {
+  children?: React.ReactNode;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+}
+
+export function AddExpenseSheet({ children, open, onOpenChange }: AddExpenseSheetProps) {
+  const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [nlInput, setNlInput] = useState("");
   const [isParsing, startParsingTransition] = useTransition();
   const [isSubmitting, startSubmittingTransition] = useTransition();
   const { addExpense, users, currentUser, groups, findUserById } = useSettleSmart();
   const { toast } = useToast();
+  
+  const controlledOpen = open !== undefined ? open : isSheetOpen;
+  const setControlledOpen = onOpenChange !== undefined ? onOpenChange : setIsSheetOpen;
 
   const form = useForm<z.infer<typeof expenseFormSchema>>({
     resolver: zodResolver(expenseFormSchema),
@@ -68,10 +78,10 @@ export function AddExpenseSheet({ children }: { children?: React.ReactNode }) {
   });
   
   useEffect(() => {
-    if (currentUser && isOpen) {
+    if (currentUser && controlledOpen) {
       form.setValue('paidById', currentUser.id);
     }
-  }, [currentUser, isOpen, form]);
+  }, [currentUser, controlledOpen, form]);
 
   const handleParse = () => {
     if (!nlInput) return;
@@ -118,15 +128,8 @@ export function AddExpenseSheet({ children }: { children?: React.ReactNode }) {
             title: "Expense Added",
             description: `The expense "${values.description}" has been successfully recorded.`,
         });
-        form.reset({
-          description: "",
-          amount: 0,
-          paidById: currentUser?.id || "",
-          splitWith: [],
-          groupId: "",
-        });
-        setNlInput("");
-        setIsOpen(false);
+        resetForm();
+        setControlledOpen(false);
       } catch (error) {
         console.error("Failed to add expense:", error);
         toast({
@@ -154,11 +157,11 @@ export function AddExpenseSheet({ children }: { children?: React.ReactNode }) {
 
 
   return (
-    <Sheet open={isOpen} onOpenChange={(open) => {
+    <Sheet open={controlledOpen} onOpenChange={(open) => {
         if(!open) resetForm();
-        setIsOpen(open);
+        setControlledOpen(open);
     }}>
-      {children}
+      {children && <SheetTrigger asChild>{children}</SheetTrigger>}
       <SheetContent className="flex flex-col gap-0 p-0 sm:max-w-lg bg-background/90 backdrop-blur-sm">
         <SheetHeader className="p-6">
           <SheetTitle>Log a New Expense</SheetTitle>
