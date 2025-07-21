@@ -7,6 +7,7 @@ import { Home, Users, Plus, User as UserIcon, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AddExpenseSheet } from "./add-expense-sheet";
 import { Button } from "./ui/button";
+import { Sheet, SheetTrigger } from "./ui/sheet";
 
 export function BottomNavbar() {
   const pathname = usePathname();
@@ -60,10 +61,12 @@ export function BottomNavbar() {
 // Override AddExpenseSheet trigger for mobile FAB
 function MobileAddExpenseSheet() {
     return (
-        <SheetTrigger asChild>
-            <Button size="icon" className="w-14 h-14 rounded-full shadow-lg shadow-primary/30 -translate-y-4">
-                <Plus className="w-6 h-6" />
-            </Button>
-        </SheetTrigger>
+        <Sheet>
+            <SheetTrigger asChild>
+                <Button size="icon" className="w-14 h-14 rounded-full shadow-lg shadow-primary/30 -translate-y-4">
+                    <Plus className="w-6 h-6" />
+                </Button>
+            </SheetTrigger>
+        </Sheet>
     )
 }

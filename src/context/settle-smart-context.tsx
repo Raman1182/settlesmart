@@ -43,7 +43,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   
   const [users, setUsers] = useState<User[]>(mockUsers);
   const [groups, setGroups] = useState<Group[]>([]);
-  const [expenses, setExpenses] = useState<Expense[]>(mockExpenses);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
   
   const getInitials = (name: string) => {
     const names = name.split(' ');
@@ -131,10 +131,26 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
       const unsubscribe = onSnapshot(groupsQuery, (snapshot) => {
         const userGroups = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Group));
         setGroups(userGroups);
+
         // When groups change, we might have new members whose user data we need to fetch
         const allMemberIds = userGroups.flatMap(g => g.members);
         fetchUsers(allMemberIds);
+
+        // Fetch expenses for these groups
+        if (userGroups.length > 0) {
+            const groupIds = userGroups.map(g => g.id);
+            const expensesQuery = query(collection(db, "expenses"), where("groupId", "in", groupIds));
+            const unsubExpenses = onSnapshot(expensesQuery, (expensesSnapshot) => {
+                const groupExpenses = expensesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Expense))
+                  .sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+                setExpenses(groupExpenses);
+            });
+            return () => unsubExpenses();
+        } else {
+            setExpenses([]);
+        }
       });
+
       return () => unsubscribe();
     }
   }, [currentUser, fetchUsers]);
@@ -142,14 +158,15 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
   const findUserById = useCallback((id: string) => users.find(u => u.id === id), [users]);
 
-  const addExpense = (expenseData: Omit<Expense, 'id' | 'date'>) => {
-    // This should be updated to write to Firestore
-    const newExpense: Expense = {
-      ...expenseData,
-      id: `exp${Date.now()}`,
-      date: new Date().toISOString(),
-    };
-    setExpenses(prev => [newExpense, ...prev].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+  const addExpense = async (expenseData: Omit<Expense, 'id' | 'date'>) => {
+    if (!currentUser) throw new Error("Not authenticated");
+    
+    const newExpenseRef = doc(collection(db, "expenses"));
+    await setDoc(newExpenseRef, {
+        ...expenseData,
+        date: new Date().toISOString(),
+        createdBy: currentUser.id,
+    });
   };
   
   const signup = async (email: string, password: string, name: string) => {
@@ -159,7 +176,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     const newUser: Omit<User, 'id'> = {
       name,
       email,
-      avatar: `https://placehold.co/100x100?text=${initials}`,
+      avatar: `https://placehold.co/100x100.png`,
       initials,
     };
     await setDoc(doc(db, "users", firebaseUser.uid), newUser);
@@ -224,15 +241,13 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
           });
       }
       
-      // Firestore does not support arrayUnion and arrayRemove in the same update.
-      // We will perform a transaction or batched write for this.
       const batch = writeBatch(db);
 
-      if (memberIdsToRemove.length > 0) {
-          batch.update(groupRef, { members: arrayRemove(...memberIdsToRemove) });
-      }
       if (membersToAddIds.length > 0) {
          batch.update(groupRef, { members: arrayUnion(...membersToAddIds) });
+      }
+      if (memberIdsToRemove.length > 0) {
+          batch.update(groupRef, { members: arrayRemove(...memberIdsToRemove) });
       }
 
       await batch.commit();
@@ -298,8 +313,8 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
         .filter(s => s.from && s.to);
 
     return {
-      totalOwedToUser: finalSettlements.filter(s => s.to.id === currentUser.id).reduce((sum, s) => sum + s.amount, 0),
-      totalOwedByUser: finalSettlements.filter(s => s.from.id === currentUser.id).reduce((sum, s) => sum + s.amount, 0),
+      totalOwedToUser: finalSettlements.filter(s => s.to?.id === currentUser.id).reduce((sum, s) => sum + s.amount, 0),
+      totalOwedByUser: finalSettlements.filter(s => s.from?.id === currentUser.id).reduce((sum, s) => sum + s.amount, 0),
       settlements: finalSettlements
     };
   }, [expenses, users, currentUser, findUserById]);
