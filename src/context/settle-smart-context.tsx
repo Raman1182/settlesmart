@@ -2,10 +2,11 @@
 "use client";
 
 import React, { createContext, useContext, useState, useMemo, useCallback, useEffect } from "react";
-import { auth } from "@/lib/firebase";
+import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged, User as FirebaseUser, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut } from "firebase/auth";
+import { collection, addDoc, query, where, onSnapshot, doc, updateDoc, serverTimestamp } from "firebase/firestore";
 
-import type { User, Group, Expense, Participant, UnequalSplit, ChecklistItem } from "@/lib/types";
+import type { User, Group, Expense, Participant, UnequalSplit, ChecklistItem, Message } from "@/lib/types";
 import { users as mockUsers, groups as mockGroups, expenses as mockExpenses } from '@/lib/data';
 
 interface AddExpenseData {
@@ -26,6 +27,7 @@ interface SettleSmartContextType {
   users: User[];
   groups: Group[];
   expenses: Expense[];
+  messages: Message[];
   addExpense: (expense: AddExpenseData) => void;
   balances: {
     totalOwedToUser: number;
@@ -52,6 +54,8 @@ interface SettleSmartContextType {
   signUp: (email: string, pass: string) => Promise<any>;
   signIn: (email: string, pass: string) => Promise<any>;
   signOut: () => Promise<void>;
+  sendMessage: (receiverId: string, text: string) => Promise<void>;
+  markMessageAsRead: (messageId: string) => Promise<void>;
 }
 
 const SettleSmartContext = createContext<SettleSmartContextType | undefined>(undefined);
@@ -64,6 +68,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const [groups, setGroups] = useState<Group[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [groupChecklists, setGroupChecklists] = useState<{ [groupId: string]: ChecklistItem[] }>({});
+  const [messages, setMessages] = useState<Message[]>([]);
 
   useEffect(() => {
     // Simulate loading static mock data once
@@ -71,16 +76,12 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     setGroups(mockGroups);
     setExpenses(mockExpenses.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
 
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
         if (user) {
-            // In a real app, you would fetch the user profile from Firestore.
-            // Here, we'll find the user in our mock data by email.
             const existingUser = mockUsers.find(u => u.email === user.email);
             if (existingUser) {
-              // Simulate this user being logged in
               setCurrentUser({ ...existingUser, id: user.uid });
             } else {
-              // Handle new user creation (or user not in mock data)
               const newUser: User = {
                 id: user.uid,
                 email: user.email!,
@@ -97,8 +98,32 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
         setIsLoading(false);
     });
 
-    return () => unsubscribe();
+    return () => unsubscribeAuth();
   }, []);
+
+  useEffect(() => {
+    if (!currentUser) {
+        setMessages([]);
+        return;
+    };
+
+    const q = query(collection(db, "messages"), where("receiverId", "==", currentUser.id));
+    const unsubscribeMessages = onSnapshot(q, (querySnapshot) => {
+        const receivedMessages: Message[] = [];
+        querySnapshot.forEach((doc) => {
+            const data = doc.data();
+            receivedMessages.push({ 
+                id: doc.id,
+                ...data,
+                createdAt: data.createdAt?.toDate().toISOString() || new Date().toISOString()
+            } as Message);
+        });
+        setMessages(receivedMessages.sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+    });
+    
+    return () => unsubscribeMessages();
+  }, [currentUser]);
+
 
   const signUp = (email: string, pass: string) => {
     return createUserWithEmailAndPassword(auth, email, pass);
@@ -108,6 +133,22 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   }
   const signOut = () => {
     return firebaseSignOut(auth);
+  }
+
+  const sendMessage = async (receiverId: string, text: string) => {
+    if (!currentUser) throw new Error("Not authenticated");
+    await addDoc(collection(db, "messages"), {
+      senderId: currentUser.id,
+      receiverId,
+      text,
+      read: false,
+      createdAt: serverTimestamp()
+    });
+  }
+  
+  const markMessageAsRead = async (messageId: string) => {
+    const messageRef = doc(db, "messages", messageId);
+    await updateDoc(messageRef, { read: true });
   }
 
 
@@ -133,7 +174,6 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
         if (user) {
           memberIds.add(user.id);
         } else {
-          // For now, we'll just add new ad-hoc users to the main user list for simplicity in this demo
           const newId = `user-${new Date().getTime()}-${Math.random()}`;
           const newUser: User = {
             id: newId,
@@ -174,7 +214,6 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   
   const deleteGroup = async (groupId: string) => {
     setGroups(prev => prev.filter(g => g.id !== groupId));
-    // Also delete associated expenses
     setExpenses(prev => prev.filter(e => e.groupId !== groupId));
   };
   
@@ -200,8 +239,6 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   
   const settleFriendDebt = async (friendId: string) => {
     if (!currentUser) throw new Error("Not authenticated");
-    // In a real app, this would be more complex, likely creating a settlement transaction.
-    // This mock implementation removes expenses that are *only* between these two users.
     const expensesToRemove = expenses.filter(e => {
         const participants = new Set(e.splitWith);
         return participants.size === 2 && participants.has(currentUser.id) && participants.has(friendId);
@@ -211,7 +248,6 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   }
   
   const settleAllInGroup = (groupId: string) => {
-    // This simply removes all expenses associated with the group to clear the balance.
     setExpenses(prev => prev.filter(e => e.groupId !== groupId));
   };
 
@@ -340,6 +376,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     users,
     groups,
     expenses,
+    messages,
     addExpense,
     balances,
     getGroupBalances,
@@ -356,6 +393,8 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     signUp,
     signIn,
     signOut,
+    sendMessage,
+    markMessageAsRead
   };
 
   return (

@@ -48,3 +48,12 @@ export interface ChecklistItem {
   name: string;
   completed: boolean;
 }
+
+export interface Message {
+  id: string;
+  senderId: string;
+  receiverId: string;
+  text: string;
+  read: boolean;
+  createdAt: string;
+}

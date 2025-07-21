@@ -29,10 +29,12 @@ interface FriendWithBalance {
 
 
 export default function FriendsPage() {
-  const { users, currentUser, balances, settleFriendDebt, isLoading } = useSettleSmart();
+  const { users, currentUser, balances, settleFriendDebt, sendMessage, isLoading } = useSettleSmart();
   const { toast } = useToast();
   const [settleFriend, setSettleFriend] = useState<FriendWithBalance | null>(null);
   const [messageFriend, setMessageFriend] = useState<FriendWithBalance | null>(null);
+  const [messageText, setMessageText] = useState("");
+  const [isSendingMessage, startSendingMessageTransition] = useTransition();
   const [isSettling, startSettleTransition] = useTransition();
   const router = useRouter();
   
@@ -125,6 +127,24 @@ export default function FriendsPage() {
     });
   }
 
+  const handleSendMessage = () => {
+    if (!messageFriend || !messageText.trim()) return;
+    startSendingMessageTransition(async () => {
+        try {
+            await sendMessage(messageFriend.id, messageText);
+            toast({ title: "Message sent!" });
+            setMessageFriend(null);
+            setMessageText("");
+        } catch (error: any) {
+             toast({
+                variant: "destructive",
+                title: "Error sending message",
+                description: error.message,
+            });
+        }
+    });
+  }
+
   const getFriendTrustScore = (balance: number) => {
     let score = 50; 
     
@@ -161,6 +181,7 @@ export default function FriendsPage() {
         if (!open) {
             setSettleFriend(null);
             setMessageFriend(null);
+            setMessageText("");
         }
     }}>
       <div className="flex flex-col min-h-screen w-full">
@@ -250,13 +271,20 @@ export default function FriendsPage() {
                 <AlertDialogHeader>
                     <AlertDialogTitle>Message {messageFriend.name}</AlertDialogTitle>
                     <AlertDialogDescription>
-                        Send a quick message or reminder. This functionality is for demonstration purposes.
+                       Send a quick message or reminder to your friend.
                     </AlertDialogDescription>
                 </AlertDialogHeader>
                 <div className="flex w-full items-center space-x-2 py-4">
-                    <Input id="message" placeholder="Type your message..." className="flex-1" />
-                    <Button type="submit" size="icon" onClick={() => toast({ title: "Message sent! (demo)" })}>
-                        <Send className="h-4 w-4" />
+                    <Input 
+                        id="message" 
+                        placeholder="Type your message..." 
+                        className="flex-1"
+                        value={messageText}
+                        onChange={(e) => setMessageText(e.target.value)}
+                        disabled={isSendingMessage}
+                    />
+                    <Button type="submit" size="icon" onClick={handleSendMessage} disabled={isSendingMessage || !messageText.trim()}>
+                        {isSendingMessage ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                     </Button>
                 </div>
                 <AlertDialogFooter>
