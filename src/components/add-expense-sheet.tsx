@@ -35,6 +35,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { Checkbox } from "./ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
+import type { User } from "@/lib/types";
 
 const expenseFormSchema = z.object({
   description: z.string().min(2, {
@@ -132,7 +133,7 @@ export function AddExpenseSheet() {
   };
   
   const selectedGroupId = form.watch("groupId");
-  const membersOfSelectedGroup = groups.find(g => g.id === selectedGroupId)?.members.map(id => findUserById(id)).filter(Boolean) as any[];
+  const membersOfSelectedGroup = groups.find(g => g.id === selectedGroupId)?.members.map(id => findUserById(id)).filter(Boolean) as User[];
 
 
   return (
@@ -254,7 +255,7 @@ export function AddExpenseSheet() {
                 />
               </div>
 
-             {selectedGroupId && (
+             {selectedGroupId && membersOfSelectedGroup?.length > 0 && (
                 <FormField
                     control={form.control}
                     name="splitWith"

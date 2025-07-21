@@ -52,10 +52,10 @@ export function AppSidebar() {
                             {groups.map(group => (
                                 <Link
                                     key={group.id}
-                                    href="#"
+                                    href={`/group/${group.id}`}
                                     className={cn(
                                         "flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary text-sm",
-                                        "opacity-50 cursor-not-allowed" // Make it disabled for now
+                                        pathname === `/group/${group.id}` && "bg-muted text-primary"
                                     )}
                                 >
                                     <Users className="h-4 w-4" />

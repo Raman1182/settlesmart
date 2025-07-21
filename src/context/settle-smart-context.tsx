@@ -12,7 +12,7 @@ import {
   signOut,
   User as FirebaseUser
 } from "firebase/auth";
-import { doc, setDoc, getDoc, updateDoc, collection, query, where, getDocs, writeBatch, serverTimestamp, onSnapshot } from "firebase/firestore";
+import { doc, setDoc, getDoc, updateDoc, collection, query, where, getDocs, writeBatch, serverTimestamp, onSnapshot, arrayUnion, arrayRemove, DocumentReference } from "firebase/firestore";
 
 interface SettleSmartContextType {
   currentUser: User | null;
@@ -32,6 +32,7 @@ interface SettleSmartContextType {
   logout: () => Promise<void>;
   updateUserProfile: (data: Partial<Omit<User, 'id' | 'email'>>) => Promise<void>;
   createGroup: (name: string, memberEmails: string[]) => Promise<void>;
+  updateGroupMembers: (groupId: string, memberEmailsToAdd: string[], memberIdsToRemove: string[]) => Promise<void>;
 }
 
 const SettleSmartContext = createContext<SettleSmartContextType | undefined>(undefined);
@@ -51,6 +52,34 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     }
     return name.substring(0, 2).toUpperCase();
   }
+
+  const fetchUsers = useCallback(async (userIds: string[]) => {
+    if (userIds.length === 0) return;
+    
+    // Deduplicate user IDs to fetch
+    const userIdsToFetch = userIds.filter(id => !users.some(u => u.id === id));
+    if (userIdsToFetch.length === 0) return;
+
+    try {
+      const usersQuery = query(collection(db, "users"), where("__name__", "in", [...new Set(userIdsToFetch)]));
+      const querySnapshot = await getDocs(usersQuery);
+      const fetchedUsers = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
+      
+      setUsers(prevUsers => {
+          const newUsers = [...prevUsers];
+          fetchedUsers.forEach(fetchedUser => {
+              if(!newUsers.some(u => u.id === fetchedUser.id)) {
+                  newUsers.push(fetchedUser);
+              }
+          });
+          return newUsers;
+      });
+
+    } catch (error) {
+        console.error("Error fetching user data:", error);
+    }
+  }, [users]);
+
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
@@ -101,10 +130,13 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
       const unsubscribe = onSnapshot(groupsQuery, (snapshot) => {
         const userGroups = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Group));
         setGroups(userGroups);
+        // When groups change, we might have new members whose user data we need to fetch
+        const allMemberIds = userGroups.flatMap(g => g.members);
+        fetchUsers(allMemberIds);
       });
       return () => unsubscribe();
     }
-  }, [currentUser]);
+  }, [currentUser, fetchUsers]);
 
 
   const findUserById = useCallback((id: string) => users.find(u => u.id === id), [users]);
@@ -156,17 +188,13 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
       const allEmails = [currentUser.email, ...memberEmails];
       const memberIds = new Set<string>([currentUser.id]);
-
-      const usersQuery = query(collection(db, "users"), where("email", "in", allEmails));
-      const querySnapshot = await getDocs(usersQuery);
       
-      querySnapshot.forEach((doc) => {
-          memberIds.add(doc.id);
-      });
-
-      if (memberEmails.length + 1 > memberIds.size -1) {
-          // This logic is tricky. A simpler check might be needed.
-          // For now, let's just ensure we don't throw an error for valid members.
+      if (allEmails.length > 1) {
+          const usersQuery = query(collection(db, "users"), where("email", "in", allEmails));
+          const querySnapshot = await getDocs(usersQuery);
+          querySnapshot.forEach((doc) => {
+              memberIds.add(doc.id);
+          });
       }
       
       const newGroupRef = doc(collection(db, "groups"));
@@ -177,6 +205,39 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
           createdBy: currentUser.id,
       });
   };
+
+  const updateGroupMembers = async (groupId: string, memberEmailsToAdd: string[], memberIdsToRemove: string[]) => {
+      const groupRef = doc(db, "groups", groupId);
+      const membersToAddIds: string[] = [];
+
+      if (memberEmailsToAdd.length > 0) {
+          const usersQuery = query(collection(db, "users"), where("email", "in", memberEmailsToAdd));
+          const querySnapshot = await getDocs(usersQuery);
+          querySnapshot.forEach((doc) => {
+              membersToAddIds.push(doc.id);
+          });
+      }
+
+      const updatePayload: any = {};
+      if (membersToAddIds.length > 0) {
+          updatePayload.members = arrayUnion(...membersToAddIds);
+      }
+      if (memberIdsToRemove.length > 0) {
+          if (!updatePayload.members) updatePayload.members = arrayRemove(...memberIdsToRemove);
+          else {
+              // This is more complex; Firestore doesn't support arrayUnion and arrayRemove in the same update.
+              // We will perform a transaction for this.
+              console.error("Combining add and remove in one go is not directly supported, requires transactions.");
+              // For simplicity, we'll do two separate updates. This is not atomic.
+              await updateDoc(groupRef, { members: arrayRemove(...memberIdsToRemove) });
+              await updateDoc(groupRef, { members: arrayUnion(...membersToAddIds) });
+              return;
+          }
+      }
+      
+      await updateDoc(groupRef, updatePayload);
+  };
+
 
   
   const balances = useMemo(() => {
@@ -258,6 +319,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     logout,
     updateUserProfile,
     createGroup,
+    updateGroupMembers,
   };
 
   return (
