@@ -5,7 +5,6 @@ import React, { createContext, useContext, useState, useMemo, useCallback, useEf
 import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged, User as FirebaseUser, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut } from "firebase/auth";
 import { collection, addDoc, query, where, onSnapshot, doc, updateDoc, serverTimestamp, getDocs, orderBy, deleteDoc, getDoc, setDoc, arrayUnion, arrayRemove, writeBatch } from "firebase/firestore";
-import { sendFriendRequest as sendFriendRequestFlow, respondToFriendRequest } from "@/ai/flows/friend-request-flow";
 
 import type { User, Group, Expense, Participant, UnequalSplit, ChecklistItem, Message, Friendship } from "@/lib/types";
 
@@ -211,15 +210,44 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
   const sendFriendRequest = async (email: string) => {
     if (!currentUser) throw new Error("Not authenticated");
-    await sendFriendRequestFlow({ fromUserId: currentUser.id, toUserEmail: email });
+    
+    const usersRef = collection(db, 'users');
+    const q = query(usersRef, where('email', '==', email));
+    const toUserSnapshot = await getDocs(q);
+
+    if (toUserSnapshot.empty) {
+      throw new Error('User with that email does not exist.');
+    }
+    const toUser = { id: toUserSnapshot.docs[0].id, ...toUserSnapshot.docs[0].data() };
+
+    if (toUser.id === currentUser.id) {
+      throw new Error("You can't send a request to yourself.");
+    }
+
+    const friendshipsRef = collection(db, 'friendships');
+    const existingQuery = query(friendshipsRef, where('userIds', 'in', [[currentUser.id, toUser.id], [toUser.id, currentUser.id]]));
+    const existingSnapshot = await getDocs(existingQuery);
+
+    if (!existingSnapshot.empty) {
+      throw new Error("You are already friends or a request is pending.");
+    }
+
+    await addDoc(friendshipsRef, {
+      userIds: [currentUser.id, toUser.id],
+      status: 'pending',
+      requestedBy: currentUser.id,
+      createdAt: serverTimestamp(),
+    });
   }
 
   const acceptFriendRequest = async (friendshipId: string) => {
-    await respondToFriendRequest({ friendshipId, response: 'accepted' });
+     const friendshipRef = doc(db, 'friendships', friendshipId);
+     await updateDoc(friendshipRef, { status: 'accepted' });
   }
 
   const rejectFriendRequest = async (friendshipId: string) => {
-    await respondToFriendRequest({ friendshipId, response: 'rejected' });
+     const friendshipRef = doc(db, 'friendships', friendshipId);
+     await deleteDoc(friendshipRef);
   }
   
    const getChatMessages = (friendId: string, callback: (messages: Message[]) => void) => {
