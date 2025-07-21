@@ -51,6 +51,8 @@ interface SettleSmartContextType {
   groupChecklists: { [groupId: string]: ChecklistItem[] };
   updateGroupChecklist: (groupId: string, items: ChecklistItem[]) => void;
   settleFriendDebt: (friendId: string) => Promise<void>;
+  calculateSettlements: (expensesToCalculate: Expense[], allParticipantIds: string[]) => { [key: string]: number; };
+  simplifyDebts: (userBalances: { [key: string]: number; }) => { from: string; to: string; amount: number; }[];
   simplifyGroupDebts: (groupId: string) => { from: User, to: User, amount: number }[];
   settleAllInGroup: (groupId: string) => void;
   sendFriendRequest: (receiverId: string) => Promise<void>;
@@ -737,6 +739,8 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     groupChecklists,
     updateGroupChecklist,
     settleFriendDebt,
+    calculateSettlements,
+    simplifyDebts,
     simplifyGroupDebts,
     settleAllInGroup,
     sendFriendRequest,
