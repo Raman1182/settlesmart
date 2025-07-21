@@ -80,7 +80,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
   const [auth, setAuth] = useState<Auth | null>(null);
   const [db, setDb] = useState<Firestore | null>(null);
-
+  
   const findUserById = useCallback((id: string): User | undefined => {
       return users.find(u => u.id === id);
   }, [users]);
@@ -134,7 +134,13 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   }, []);
 
   useEffect(() => {
-    if (isAuthLoading || !db) {
+    if (isAuthLoading || !db || !currentUser) {
+        setUsers([]);
+        setGroups([]);
+        setExpenses([]);
+        setFriendships([]);
+        setChats([]);
+        setGroupChecklists({});
         return;
     }
 
@@ -142,52 +148,43 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     let unsubGroups: () => void = () => {};
     let unsubFriendships: () => void = () => {};
     let unsubChats: () => void = () => {};
+    
+    unsubUsers = onSnapshot(collection(db, "users"), (snapshot) => {
+        const allUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
+        setUsers(allUsers);
+    });
 
-    if (currentUser) {
-        unsubUsers = onSnapshot(collection(db, "users"), (snapshot) => {
-            const allUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
-            setUsers(allUsers);
-        });
+    const qGroups = query(collection(db, "groups"), where("members", "array-contains", currentUser.id));
+    unsubGroups = onSnapshot(qGroups, (snapshot) => {
+        const userGroups: Group[] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data()} as Group));
+        setGroups(userGroups);
+    });
+    
+    const qFriendships = query(collection(db, "friendships"), where("participantIds", "array-contains", currentUser.id));
+    unsubFriendships = onSnapshot(qFriendships, (snapshot) => {
+        const userFriendships = snapshot.docs.map(doc => ({id: doc.id, ...doc.data() } as Friendship));
+        setFriendships(userFriendships);
+    });
 
-        const qGroups = query(collection(db, "groups"), where("members", "array-contains", currentUser.id));
-        unsubGroups = onSnapshot(qGroups, (snapshot) => {
-            const userGroups: Group[] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data()} as Group));
-            setGroups(userGroups);
-        });
-        
-        const qFriendships = query(collection(db, "friendships"), where("participantIds", "array-contains", currentUser.id));
-        unsubFriendships = onSnapshot(qFriendships, (snapshot) => {
-            const userFriendships = snapshot.docs.map(doc => ({id: doc.id, ...doc.data() } as Friendship));
-            setFriendships(userFriendships);
-        });
+    const qChats = query(collection(db, 'chats'), where('participantIds', 'array-contains', currentUser.id));
+    unsubChats = onSnapshot(qChats, (snapshot) => {
+      const allChats = snapshot.docs.map(doc => {
+        const data = doc.data();
+        const friendId = data.participantIds.find((id: string) => id !== currentUser.id);
+        const friend = findUserById(friendId);
+        return {
+          id: doc.id,
+          ...data,
+          lastMessage: data.lastMessage ? {
+              ...data.lastMessage,
+              timestamp: data.lastMessage.timestamp?.toDate().toISOString()
+          } : null,
+          participants: [currentUser, friend].filter(Boolean)
+        } as Chat;
+      });
+      setChats(allChats);
+    });
 
-        const qChats = query(collection(db, 'chats'), where('participantIds', 'array-contains', currentUser.id));
-        unsubChats = onSnapshot(qChats, (snapshot) => {
-          const allChats = snapshot.docs.map(doc => {
-            const data = doc.data();
-            const friendId = data.participantIds.find((id: string) => id !== currentUser.id);
-            const friend = users.find(u => u.id === friendId);
-            return {
-              id: doc.id,
-              ...data,
-              lastMessage: data.lastMessage ? {
-                  ...data.lastMessage,
-                  timestamp: data.lastMessage.timestamp?.toDate().toISOString()
-              } : null,
-              participants: [currentUser, friend].filter(Boolean)
-            } as Chat;
-          });
-          setChats(allChats);
-        });
-
-    } else {
-        setUsers([]);
-        setGroups([]);
-        setExpenses([]);
-        setFriendships([]);
-        setChats([]);
-        setGroupChecklists({});
-    }
 
     return () => {
         unsubUsers();
@@ -195,7 +192,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
         unsubFriendships();
         unsubChats();
     };
-  }, [currentUser, isAuthLoading, db]);
+  }, [currentUser, isAuthLoading, db, findUserById]);
   
     useEffect(() => {
         if (isAuthLoading || !db || groups.length === 0) {
@@ -474,14 +471,18 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     batch.set(newMessageRef, { ...newMessage, timestamp: serverTimestamp() });
     
     const unreadCountKey = `unreadCount.${friendId}`;
-    batch.update(chatRef, {
+    
+    const chatUpdatePayload = {
         lastMessage: {
             ...newMessage,
-            text: type === 'system' ? text : `${currentUser.name}: ${text}`, // Add sender name for user messages
+            text: type === 'system' ? text : `${currentUser.name}: ${text}`,
             timestamp: serverTimestamp(),
         },
         [unreadCountKey]: increment(1)
-    });
+    };
+
+    // Use set with merge to create the doc if it doesn't exist
+    batch.set(chatRef, chatUpdatePayload, { merge: true });
 
     await batch.commit();
   };
