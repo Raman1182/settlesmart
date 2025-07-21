@@ -52,15 +52,20 @@ export function CommandMenu() {
     document.addEventListener("keydown", down);
     return () => document.removeEventListener("keydown", down);
   }, []);
+
+  React.useEffect(() => {
+    // Reset AI state when query changes
+    setAiResponse("");
+    setIsThinking(false);
+  }, [query]);
   
   const runCommand = (command: () => void) => {
     setOpen(false);
     command();
   };
   
-  const handleAiQuery = async (e: React.FormEvent<HTMLFormElement>) => {
-      e.preventDefault();
-      if (!query) return;
+  const handleAiQuery = async () => {
+      if (!query || isThinking) return;
 
       setIsThinking(true);
       setAiResponse("");
@@ -76,67 +81,83 @@ export function CommandMenu() {
       }
   }
 
+  const showAiResponse = isThinking || aiResponse;
+
   return (
     <>
       <CommandDialog open={open} onOpenChange={setOpen}>
          <DialogTitle className="sr-only">Command Menu</DialogTitle>
-        <form onSubmit={handleAiQuery}>
             <CommandInput 
                 placeholder="Ask AI or type a command..."
                 value={query}
                 onValueChange={setQuery}
             />
-        </form>
         <CommandList>
           <CommandEmpty>
-            {isThinking ? (
-                <div className="flex items-center justify-center p-4">
-                    <Loader2 className="h-6 w-6 animate-spin text-primary" />
+             {showAiResponse ? (
+                <div className="p-4 text-sm">
+                    {isThinking ? (
+                         <div className="flex items-center gap-2 text-muted-foreground">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            <span>Thinking...</span>
+                        </div>
+                    ) : (
+                        <div className="text-foreground whitespace-pre-wrap">{aiResponse}</div>
+                    )}
                 </div>
-            ) : aiResponse ? (
-                <div className="p-4 text-sm text-foreground">{aiResponse}</div>
-            ) : (
-                "No results found."
-            )}
+            ) : "No results found."}
           </CommandEmpty>
 
-          <CommandGroup heading="Navigation">
-            <CommandItem onSelect={() => runCommand(() => router.push('/'))}>
-              <Home className="mr-2 h-4 w-4" />
-              <span>Dashboard</span>
-            </CommandItem>
-             <CommandItem onSelect={() => runCommand(() => router.push('/groups'))}>
-              <Users className="mr-2 h-4 w-4" />
-              <span>Groups</span>
-            </CommandItem>
-            <CommandItem onSelect={() => runCommand(() => router.push('/friends'))}>
-              <User className="mr-2 h-4 w-4" />
-              <span>Friends</span>
-            </CommandItem>
-             <CommandItem onSelect={() => runCommand(() => router.push('/insights'))}>
-              <LineChart className="mr-2 h-4 w-4" />
-              <span>Insights</span>
-            </CommandItem>
-          </CommandGroup>
-           <CommandGroup heading="Actions">
-             <CommandItem onSelect={() => runCommand(() => setAddExpenseOpen(true))}>
-              <CreditCard className="mr-2 h-4 w-4" />
-              <span>Add Expense</span>
-            </CommandItem>
-            <CommandItem onSelect={() => runCommand(() => setCreateGroupOpen(true))}>
-              <Users className="mr-2 h-4 w-4" />
-              <span>Create Group</span>
-            </CommandItem>
-           </CommandGroup>
-          <CommandSeparator />
-          <CommandGroup heading="Groups">
-             {groups.map(group => (
-                <CommandItem key={group.id} onSelect={() => runCommand(() => router.push(`/group/${group.id}`))}>
-                    <Users className="mr-2 h-4 w-4" />
-                    <span>{group.name}</span>
+        {!showAiResponse && (
+          <>
+            {query && (
+                 <CommandGroup heading="AI Assistant">
+                    <CommandItem onSelect={handleAiQuery}>
+                        <Sparkles className="mr-2 h-4 w-4" />
+                        <span>Ask AI: "{query}"</span>
+                    </CommandItem>
+                </CommandGroup>
+            )}
+
+            <CommandGroup heading="Navigation">
+                <CommandItem onSelect={() => runCommand(() => router.push('/'))}>
+                <Home className="mr-2 h-4 w-4" />
+                <span>Dashboard</span>
                 </CommandItem>
-             ))}
-          </CommandGroup>
+                <CommandItem onSelect={() => runCommand(() => router.push('/groups'))}>
+                <Users className="mr-2 h-4 w-4" />
+                <span>Groups</span>
+                </CommandItem>
+                <CommandItem onSelect={() => runCommand(() => router.push('/friends'))}>
+                <User className="mr-2 h-4 w-4" />
+                <span>Friends</span>
+                </CommandItem>
+                <CommandItem onSelect={() => runCommand(() => router.push('/insights'))}>
+                <LineChart className="mr-2 h-4 w-4" />
+                <span>Insights</span>
+                </CommandItem>
+            </CommandGroup>
+            <CommandGroup heading="Actions">
+                <CommandItem onSelect={() => runCommand(() => setAddExpenseOpen(true))}>
+                <CreditCard className="mr-2 h-4 w-4" />
+                <span>Add Expense</span>
+                </CommandItem>
+                <CommandItem onSelect={() => runCommand(() => setCreateGroupOpen(true))}>
+                <Users className="mr-2 h-4 w-4" />
+                <span>Create Group</span>
+                </CommandItem>
+            </CommandGroup>
+            <CommandSeparator />
+            <CommandGroup heading="Groups">
+                {groups.map(group => (
+                    <CommandItem key={group.id} onSelect={() => runCommand(() => router.push(`/group/${group.id}`))}>
+                        <Users className="mr-2 h-4 w-4" />
+                        <span>{group.name}</span>
+                    </CommandItem>
+                ))}
+            </CommandGroup>
+           </>
+        )}
         </CommandList>
       </CommandDialog>
       <AddExpenseSheet open={addExpenseOpen} onOpenChange={setAddExpenseOpen} />
