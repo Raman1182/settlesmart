@@ -172,7 +172,7 @@ export default function FriendsPage() {
                                   <AvatarFallback>{friend.initials}</AvatarFallback>
                               </Avatar>
                               <div className="flex-1">
-                                  <p className="font-semibold">{friend.name} {isAdhoc && <Badge variant="outline">Contact</Badge>}</p>
+                                  <div className="font-semibold">{friend.name} {isAdhoc && <Badge variant="outline">Contact</Badge>}</div>
                                   <p className="text-sm text-muted-foreground">{isAdhoc ? 'Not on SettleSmart yet' : friend.email}</p>
                               </div>
                                <Button variant="ghost" size="icon" onClick={() => router.push(`/chat/${friend.id}`)} disabled={isProcessing || isAdhoc} className="relative">
