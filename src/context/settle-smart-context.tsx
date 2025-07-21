@@ -2,6 +2,9 @@
 "use client";
 
 import React, { createContext, useContext, useState, useMemo, useCallback, useEffect } from "react";
+import { auth } from "@/lib/firebase";
+import { onAuthStateChanged, User as FirebaseUser, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut } from "firebase/auth";
+
 import type { User, Group, Expense, Participant, UnequalSplit, ChecklistItem } from "@/lib/types";
 import { users as mockUsers, groups as mockGroups, expenses as mockExpenses } from '@/lib/data';
 
@@ -18,7 +21,7 @@ interface AddExpenseData {
 }
 
 interface SettleSmartContextType {
-  currentUser: User;
+  currentUser: User | null;
   isLoading: boolean;
   users: User[];
   groups: Group[];
@@ -46,12 +49,15 @@ interface SettleSmartContextType {
   settleFriendDebt: (friendId: string) => Promise<void>;
   simplifyGroupDebts: (groupId: string) => { from: User, to: User, amount: number }[];
   settleAllInGroup: (groupId: string) => void;
+  signUp: (email: string, pass: string) => Promise<any>;
+  signIn: (email: string, pass: string) => Promise<any>;
+  signOut: () => Promise<void>;
 }
 
 const SettleSmartContext = createContext<SettleSmartContextType | undefined>(undefined);
 
 export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [currentUser] = useState<User>(mockUsers[0]);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   
   const [users, setUsers] = useState<User[]>([]);
@@ -60,13 +66,50 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const [groupChecklists, setGroupChecklists] = useState<{ [groupId: string]: ChecklistItem[] }>({});
 
   useEffect(() => {
-    // Simulate loading mock data
-    setIsLoading(true);
+    // Simulate loading static mock data once
     setUsers(mockUsers);
     setGroups(mockGroups);
     setExpenses(mockExpenses.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
-    setIsLoading(false);
+
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+        if (user) {
+            // In a real app, you would fetch the user profile from Firestore.
+            // Here, we'll find the user in our mock data by email.
+            const existingUser = mockUsers.find(u => u.email === user.email);
+            if (existingUser) {
+              // Simulate this user being logged in
+              setCurrentUser({ ...existingUser, id: user.uid });
+            } else {
+              // Handle new user creation (or user not in mock data)
+              const newUser: User = {
+                id: user.uid,
+                email: user.email!,
+                name: user.email!.split('@')[0],
+                avatar: `https://placehold.co/100x100?text=${user.email!.charAt(0).toUpperCase()}`,
+                initials: user.email!.charAt(0).toUpperCase(),
+              };
+              setUsers(prev => [...prev, newUser]);
+              setCurrentUser(newUser);
+            }
+        } else {
+            setCurrentUser(null);
+        }
+        setIsLoading(false);
+    });
+
+    return () => unsubscribe();
   }, []);
+
+  const signUp = (email: string, pass: string) => {
+    return createUserWithEmailAndPassword(auth, email, pass);
+  }
+  const signIn = (email: string, pass: string) => {
+    return signInWithEmailAndPassword(auth, email, pass);
+  }
+  const signOut = () => {
+    return firebaseSignOut(auth);
+  }
+
 
   const findUserById = useCallback((id: string) => users.find(u => u.id === id), [users]);
 
@@ -76,6 +119,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
       id: `exp-${new Date().getTime()}`,
       ...expenseData,
       date: new Date().toISOString(),
+      isRecurring: expenseData.isRecurring || false,
     };
     setExpenses(prev => [newExpense, ...prev].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
   };
@@ -156,13 +200,14 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   
   const settleFriendDebt = async (friendId: string) => {
     if (!currentUser) throw new Error("Not authenticated");
-    const expensesToSettle = expenses.filter(e => 
-        (e.paidById === currentUser.id && e.splitWith.includes(friendId)) ||
-        (e.paidById === friendId && e.splitWith.includes(currentUser.id))
-    );
     // In a real app, this would be more complex, likely creating a settlement transaction.
-    // For this mock implementation, we'll just remove the expenses between these two users.
-    setExpenses(prev => prev.filter(e => !expensesToSettle.find(es => es.id === e.id)));
+    // This mock implementation removes expenses that are *only* between these two users.
+    const expensesToRemove = expenses.filter(e => {
+        const participants = new Set(e.splitWith);
+        return participants.size === 2 && participants.has(currentUser.id) && participants.has(friendId);
+    });
+
+    setExpenses(prev => prev.filter(e => !expensesToRemove.some(er => er.id === e.id)));
   }
   
   const settleAllInGroup = (groupId: string) => {
@@ -308,6 +353,9 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     settleFriendDebt,
     simplifyGroupDebts,
     settleAllInGroup,
+    signUp,
+    signIn,
+    signOut,
   };
 
   return (

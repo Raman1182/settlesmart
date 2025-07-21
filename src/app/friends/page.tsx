@@ -14,6 +14,7 @@ import type { User } from "@/lib/types";
 import { useToast } from "@/components/ui/use-toast";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { TrustScoreIndicator } from "@/components/trust-score-indicator";
+import { useRouter } from "next/navigation";
 
 interface FriendWithBalance {
     id: string;
@@ -27,12 +28,21 @@ interface FriendWithBalance {
 
 
 export default function FriendsPage() {
-  const { users, currentUser, balances, settleFriendDebt } = useSettleSmart();
+  const { users, currentUser, balances, settleFriendDebt, isLoading } = useSettleSmart();
   const { toast } = useToast();
   const [settleFriend, setSettleFriend] = useState<FriendWithBalance | null>(null);
   const [isSettling, startSettleTransition] = useTransition();
+  const router = useRouter();
+  
+  useEffect(() => {
+    if (!isLoading && !currentUser) {
+      router.replace("/login");
+    }
+  }, [isLoading, currentUser, router]);
 
   const friendsWithBalances = useMemo(() => {
+    if (!currentUser) return [];
+    
     const friendMap: Map<string, FriendWithBalance> = new Map();
 
     users.forEach(u => {
@@ -69,7 +79,7 @@ export default function FriendsPage() {
                 name: participant.name,
                 initials: participant.name.charAt(0).toUpperCase(),
                 balance: 0,
-                isRegistered: !!participant.email,
+                isRegistered: !!(participant as User).email,
             };
             friendMap.set(friendId, friend);
         }
@@ -113,18 +123,12 @@ export default function FriendsPage() {
   }
 
   const getFriendTrustScore = (balance: number) => {
-    // A more complex calculation for friend's trust score.
-    // Start with a neutral score.
     let score = 50; 
     
-    // A balance > 0 means the friend owes me. This negatively impacts their score.
-    // The impact is logarithmic, so large debts have a bigger, but not infinite, impact.
     if (balance > 0) {
       score -= Math.min(40, Math.log(balance + 1) * 5);
     }
     
-    // A balance < 0 means I owe the friend. This positively impacts their score, as they trusted me with money.
-    // The impact is smaller than the negative impact of them owing me.
     if (balance < 0) {
       score += Math.min(30, Math.log(Math.abs(balance) + 1) * 3);
     }
@@ -139,6 +143,14 @@ export default function FriendsPage() {
           title: `${friend.name}'s Trust Score`,
           description: `${scoreType} Trust Score is ${score.toFixed(0)}. This is calculated based on your shared financial history.`
       })
+  }
+  
+  if (isLoading || !currentUser) {
+    return (
+       <div className="flex items-center justify-center min-h-screen bg-background">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+      </div>
+    );
   }
 
   return (

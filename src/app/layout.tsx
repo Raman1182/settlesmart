@@ -29,7 +29,8 @@ export default function RootLayout({
           </div>
           <Toaster />
           <CommandMenu />
-          <BottomNavbar />
+          {/* We'll conditionally render BottomNavbar based on auth state later if needed */}
+          <BottomNavbar /> 
         </SettleSmartProvider>
       </body>
     </html>

@@ -17,13 +17,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useSettleSmart } from "@/context/settle-smart-context";
-import { Settings, User as UserIcon, Award, TrendingDown, TrendingUp } from "lucide-react";
+import { Settings, User as UserIcon, Award, TrendingDown, TrendingUp, LogOut } from "lucide-react";
 import Link from "next/link";
 import { Badge } from "./ui/badge";
 import { useMemo } from "react";
 
 export function UserNav() {
-  const { currentUser, expenses, balances } = useSettleSmart();
+  const { currentUser, expenses, balances, signOut } = useSettleSmart();
 
   const userBadge = useMemo(() => {
     if (!currentUser) return null;
@@ -89,6 +89,11 @@ export function UserNav() {
             <span>Settings</span>
           </DropdownMenuItem>
         </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={signOut}>
+            <LogOut className="mr-2 h-4 w-4" />
+            <span>Log out</span>
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );

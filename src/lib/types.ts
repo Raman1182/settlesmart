@@ -27,7 +27,7 @@ export type Expense = {
   unequalSplits?: UnequalSplit[];
   date: string;
   groupId: string | null; // Can be null for expenses not in a group
-  isRecurring: boolean;
+  isRecurring?: boolean;
 };
 
 export type Group = {
