@@ -3,7 +3,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Users, Plus, MessageSquare, Bell, UserPlus } from "lucide-react";
+import { Home, Users, Plus, MessageSquare, Sparkles, UserPlus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AddExpenseSheet } from "./add-expense-sheet";
 import { Button } from "./ui/button";
@@ -31,7 +31,7 @@ export function BottomNavbar() {
     { href: "/groups", label: "Groups", icon: Users },
     { href: "#", label: "Add", icon: Plus, isAction: true },
     { href: "/chats", label: "Chats", icon: MessageSquare, notificationCount: totalUnreadCount },
-    { href: "/friends", label: "Friends", icon: UserPlus, notificationCount: friendRequestCount },
+    { href: "/assistant", label: "Assistant", icon: Sparkles },
   ];
   
     if (pathname.startsWith('/login')) {
@@ -59,7 +59,7 @@ export function BottomNavbar() {
                 href={item.href}
                 className={cn(
                 "inline-flex flex-col items-center justify-center px-5 hover:bg-muted/50 group relative",
-                 (pathname === item.href || (item.href === '/friends' && pathname.startsWith('/friends')) || (item.href === '/chats' && pathname.startsWith('/chats')))
+                 (pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href)))
                   ? "text-primary" 
                   : "text-muted-foreground"
                 )}
