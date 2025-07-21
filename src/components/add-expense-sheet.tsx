@@ -30,7 +30,7 @@ import { z } from "zod";
 import { useSettleSmart } from "@/context/settle-smart-context";
 import { parseExpense } from "@/ai/flows/parse-expense-from-natural-language";
 import { categorizeExpense } from "@/ai/flows/categorize-expense";
-import { DollarSign, Loader2, Plus, Sparkles, Users } from "lucide-react";
+import { DollarSign, Loader2, Plus, Sparkles } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { Checkbox } from "./ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
@@ -68,7 +68,6 @@ export function AddExpenseSheet() {
     },
   });
   
-  // Effect to update paidById when currentUser changes
   useState(() => {
     if (currentUser) {
       form.setValue('paidById', currentUser.id);
@@ -146,19 +145,19 @@ export function AddExpenseSheet() {
   return (
     <Sheet open={isOpen} onOpenChange={setIsOpen}>
       <SheetTrigger asChild>
-        <Button>
+        <Button className="w-full">
           <Plus className="h-4 w-4 mr-2" />
           Add Expense
         </Button>
       </SheetTrigger>
-      <SheetContent className="flex flex-col gap-0 p-0 sm:max-w-lg">
+      <SheetContent className="flex flex-col gap-0 p-0 sm:max-w-lg bg-black">
         <SheetHeader className="p-6">
           <SheetTitle>Log a New Expense</SheetTitle>
           <SheetDescription>
             Describe your expense in plain English for our AI to parse, or fill out the form manually.
           </SheetDescription>
         </SheetHeader>
-        <div className="p-6 border-y bg-muted/50">
+        <div className="p-6 border-y border-white/10 bg-card/50">
             <Textarea
                 placeholder="e.g., $25 for pizza with Alice and Bob for the apartment"
                 value={nlInput}
@@ -318,7 +317,7 @@ export function AddExpenseSheet() {
              )}
             </div>
 
-            <SheetFooter className="p-6 bg-muted/40 border-t mt-auto">
+            <SheetFooter className="p-6 bg-card/40 border-t border-white/10 mt-auto">
               <SheetClose asChild>
                 <Button variant="outline">Cancel</Button>
               </SheetClose>

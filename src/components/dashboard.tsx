@@ -12,6 +12,7 @@ import { useSettleSmart } from "@/context/settle-smart-context";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { Loader2 } from "lucide-react";
+import { BottomNavbar } from "./bottom-navbar";
 
 export function Dashboard() {
   const { currentUser, isLoading } = useSettleSmart();
@@ -49,6 +50,7 @@ export function Dashboard() {
             </div>
           </div>
         </main>
+        <BottomNavbar />
       </div>
     </div>
   );
