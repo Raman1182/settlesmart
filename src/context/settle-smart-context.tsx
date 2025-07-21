@@ -92,10 +92,10 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
                     id: user.uid,
                     email: user.email!,
                     name: name,
-                    avatar: `https://placehold.co/100x100?text=${initials}`,
+                    avatar: `https://placehold.co/100x100.png?text=${initials}`,
                     initials: initials,
                 };
-                await setDoc(userRef, { email: newUserRecord.email, name: newUserRecord.name, avatar: newUserRecord.avatar, initials: newUserRecord.initials });
+                await setDoc(userRef, { email: newUserRecord.email, name: newUserRecord.name, avatar: newUserRecord.avatar, initials: initials });
                 setCurrentUser(newUserRecord);
             }
         } else {
@@ -122,25 +122,35 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     
     const currentUserId = currentUser.id;
 
+    // Listener for all users
+    const unsubscribeUsers = onSnapshot(collection(db, "users"), (snapshot) => {
+        const allUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
+        setUsers(allUsers);
+    });
+
+    // Listener for groups the user is a member of
     const qGroups = query(collection(db, "groups"), where("members", "array-contains", currentUserId));
     const unsubscribeGroups = onSnapshot(qGroups, (snapshot) => {
         const userGroups: Group[] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data()} as Group));
         setGroups(userGroups);
 
         const groupIds = userGroups.map(g => g.id);
-
+        
+        // Guard against empty array for 'in' query
         if (groupIds.length === 0) {
             setExpenses([]);
             setGroupChecklists({});
             return;
         }
 
+        // Listener for expenses within those groups
         const qExpenses = query(collection(db, "expenses"), where("groupId", "in", groupIds));
         const unsubscribeExpenses = onSnapshot(qExpenses, (expSnapshot) => {
             const groupExpenses = expSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), date: doc.data().date.toDate().toISOString() } as Expense));
             setExpenses(groupExpenses.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
         });
 
+        // Listener for checklists within those groups
         const qChecklists = query(collection(db, "checklists"), where("groupId", "in", groupIds));
         const unsubscribeChecklists = onSnapshot(qChecklists, (checklistSnapshot) => {
             const checklistsData: {[groupId: string]: ChecklistItem[]} = {};
@@ -150,12 +160,14 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
             setGroupChecklists(checklistsData);
         });
 
+        // Cleanup nested listeners when groups change
         return () => {
             unsubscribeExpenses();
             unsubscribeChecklists();
         }
     });
 
+    // Listener for friendships
     const qFriendships = query(collection(db, "friendships"), where("userIds", "array-contains", currentUserId));
     const unsubscribeFriendships = onSnapshot(qFriendships, (querySnapshot) => {
         const userFriendships: Friendship[] = [];
@@ -165,19 +177,15 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
         setFriendships(userFriendships);
     });
 
-    const unsubscribeUsers = onSnapshot(collection(db, "users"), (snapshot) => {
-        const allUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
-        setUsers(allUsers);
-    });
-    
+    // Return cleanup function for all top-level listeners
     return () => {
+        unsubscribeUsers();
         unsubscribeGroups();
         unsubscribeFriendships();
-        unsubscribeUsers();
     };
   }, [currentUser?.id]);
   
-  // Memoize chatIds to prevent re-renders
+  // Memoize chatIds to prevent re-renders unless friendships actually change
   const chatIdsString = useMemo(() => {
     if (!currentUser?.id || friendships.length === 0) return '[]';
     
@@ -197,6 +205,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
       }
       const chatIds = JSON.parse(chatIdsString);
 
+      // Guard against empty array for 'in' query
       if (chatIds.length === 0) {
           setMessages([]);
           return;
@@ -329,7 +338,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
         name: name,
         email: `${name.replace(/\s+/g, '_')}@adhoc.settlesmart.app`,
         initials: name.charAt(0).toUpperCase(),
-        avatar: `https://placehold.co/100x100?text=${name.charAt(0).toUpperCase()}`
+        avatar: `https://placehold.co/100x100.png?text=${name.charAt(0).toUpperCase()}`
     };
     setUsers(prev => [...prev, adHocUser]);
     return adHocUser;

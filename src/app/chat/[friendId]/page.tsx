@@ -82,10 +82,26 @@ export default function ChatPage() {
     }
   };
 
-  if (isLoading || !currentUser || !friend) {
+  if (isLoading || !currentUser) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  // Add this check to handle cases where the friend is not found
+  if (!friend) {
+    return (
+      <div className="flex flex-col h-screen w-full">
+        <Header pageTitle="Chat" />
+        <main className="flex-1 flex flex-col items-center justify-center">
+            <p className="text-muted-foreground">User not found.</p>
+             <Button variant="outline" onClick={() => router.back()} className="mt-4">
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Go Back
+            </Button>
+        </main>
       </div>
     );
   }
@@ -120,7 +136,7 @@ export default function ChatPage() {
                         )}
                     >
                        <div className="w-8">
-                         {showAvatar && (
+                         {showAvatar && sender && (
                              <Avatar className="h-8 w-8">
                                 <AvatarImage src={sender.avatar} />
                                 <AvatarFallback>{sender.initials}</AvatarFallback>
