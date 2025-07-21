@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useMemo, useTransition } from "react";
+import { useState, useMemo, useTransition, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useSettleSmart } from "@/context/settle-smart-context";
 import { AppSidebar } from "@/components/app-sidebar";
@@ -24,11 +24,18 @@ export default function GroupSettingsPage() {
   const [isUpdating, startUpdateTransition] = useTransition();
 
   const group = useMemo(() => groups.find(g => g.id === groupId), [groups, groupId]);
+
   const groupMembers = useMemo(() => {
     return group?.members.map(id => findUserById(id)).filter(Boolean) as any[] || [];
   }, [group, findUserById]);
+  
+  useEffect(() => {
+    if (!isAuthLoading && !currentUser) {
+      router.push('/login');
+    }
+  }, [isAuthLoading, currentUser, router]);
 
-  if (isAuthLoading) {
+  if (isAuthLoading || !currentUser) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -127,14 +134,16 @@ export default function GroupSettingsPage() {
                                             </div>
                                              {member.id === group.createdBy && <Badge variant="secondary">Owner</Badge>}
                                         </div>
-                                        <Button 
-                                            variant="ghost" 
-                                            size="icon" 
-                                            onClick={() => handleRemoveMember(member.id)}
-                                            disabled={isUpdating || member.id === group.createdBy || member.id === currentUser?.id}
-                                        >
-                                            <Trash2 className="h-4 w-4 text-destructive"/>
-                                        </Button>
+                                        {member.id !== currentUser?.id && member.id !== group.createdBy && (
+                                            <Button 
+                                                variant="ghost" 
+                                                size="icon" 
+                                                onClick={() => handleRemoveMember(member.id)}
+                                                disabled={isUpdating}
+                                            >
+                                                <Trash2 className="h-4 w-4 text-destructive"/>
+                                            </Button>
+                                        )}
                                     </div>
                                 ))}
                             </div>

@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -62,13 +62,13 @@ export function AddExpenseSheet() {
     defaultValues: {
       description: "",
       amount: 0,
-      paidById: currentUser?.id || "",
+      paidById: "",
       splitWith: [],
       groupId: "",
     },
   });
   
-  useState(() => {
+  useEffect(() => {
     if (currentUser) {
       form.setValue('paidById', currentUser.id);
     }
@@ -213,6 +213,11 @@ export function AddExpenseSheet() {
                           field.onChange(value);
                           const groupMembers = groups.find(g => g.id === value)?.members || [];
                           form.setValue("splitWith", groupMembers);
+                          if(currentUser && !groupMembers.includes(currentUser.id)){
+                             form.setValue("paidById", "");
+                          } else if (currentUser) {
+                             form.setValue("paidById", currentUser.id);
+                          }
                       }} defaultValue={field.value}>
                       <FormControl>
                         <SelectTrigger>
@@ -235,14 +240,14 @@ export function AddExpenseSheet() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Paid by</FormLabel>
-                       <Select onValueChange={field.onChange} defaultValue={field.value}>
+                       <Select onValueChange={field.onChange} value={field.value} defaultValue={field.value}>
                         <FormControl>
                           <SelectTrigger>
                             <SelectValue placeholder="Select who paid" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {users.map(user => (
+                          {membersOfSelectedGroup.map(user => (
                             <SelectItem key={user.id} value={user.id}>
                               <div className="flex items-center gap-2">
                                 <Avatar className="h-6 w-6">

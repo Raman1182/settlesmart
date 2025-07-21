@@ -3,16 +3,14 @@
 
 import React, { createContext, useContext, useState, useMemo, useCallback, useEffect } from "react";
 import type { User, Group, Expense } from "@/lib/types";
-import { users as mockUsers, groups as mockGroups, expenses as mockExpenses } from "@/lib/data";
 import { auth, db } from '@/lib/firebase';
 import { 
   onAuthStateChanged, 
   createUserWithEmailAndPassword, 
   signInWithEmailAndPassword, 
   signOut,
-  User as FirebaseUser
 } from "firebase/auth";
-import { doc, setDoc, getDoc, updateDoc, collection, query, where, getDocs, writeBatch, serverTimestamp, onSnapshot, arrayUnion, arrayRemove, DocumentReference } from "firebase/firestore";
+import { doc, setDoc, getDoc, updateDoc, collection, query, where, getDocs, writeBatch, serverTimestamp, onSnapshot, arrayUnion, arrayRemove } from "firebase/firestore";
 
 interface SettleSmartContextType {
   currentUser: User | null;
@@ -41,7 +39,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   
-  const [users, setUsers] = useState<User[]>(mockUsers);
+  const [users, setUsers] = useState<User[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   
@@ -56,23 +54,21 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const fetchUsers = useCallback(async (userIds: string[]) => {
     if (userIds.length === 0) return;
     
-    // Deduplicate user IDs to fetch
-    const userIdsToFetch = userIds.filter(id => !users.some(u => u.id === id));
+    const uniqueUserIds = [...new Set(userIds)];
+    const userIdsToFetch = uniqueUserIds.filter(id => !users.some(u => u.id === id));
     if (userIdsToFetch.length === 0) return;
 
     try {
-      const usersQuery = query(collection(db, "users"), where("__name__", "in", [...new Set(userIdsToFetch)]));
+      const usersQuery = query(collection(db, "users"), where("__name__", "in", userIdsToFetch));
       const querySnapshot = await getDocs(usersQuery);
       const fetchedUsers = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
       
       setUsers(prevUsers => {
-          const newUsers = [...prevUsers];
+          const newUsersMap = new Map(prevUsers.map(u => [u.id, u]));
           fetchedUsers.forEach(fetchedUser => {
-              if(!newUsers.some(u => u.id === fetchedUser.id)) {
-                  newUsers.push(fetchedUser);
-              }
+              newUsersMap.set(fetchedUser.id, fetchedUser);
           });
-          return newUsers;
+          return Array.from(newUsersMap.values());
       });
 
     } catch (error) {
@@ -97,7 +93,6 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
               return [...prevUsers, userData];
             });
           } else {
-             // This case might happen if user record is deleted from Firestore but not Auth
             setCurrentUser(null);
           }
           setIsLoading(false);
@@ -107,7 +102,6 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
             setCurrentUser(null);
         });
 
-        // Return the user doc listener unsubscribe function to be called on cleanup
         return () => userUnsubscribe();
       } else {
         setCurrentUser(null);
@@ -127,16 +121,16 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
         const userGroups = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Group));
         setGroups(userGroups);
 
-        // When groups change, we might have new members whose user data we need to fetch
         const allMemberIds = userGroups.flatMap(g => g.members);
-        fetchUsers(allMemberIds);
+        if (allMemberIds.length > 0) {
+          fetchUsers(allMemberIds);
+        }
 
-        // Fetch expenses for these groups
         if (userGroups.length > 0) {
             const groupIds = userGroups.map(g => g.id);
             const expensesQuery = query(collection(db, "expenses"), where("groupId", "in", groupIds));
             const unsubExpenses = onSnapshot(expensesQuery, (expensesSnapshot) => {
-                const groupExpenses = expensesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Expense))
+                const groupExpenses = expensesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), date: (doc.data().date as any).toDate ? (doc.data().date as any).toDate().toISOString() : doc.data().date } as Expense))
                   .sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
                 setExpenses(groupExpenses);
             });
@@ -159,7 +153,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     const newExpenseRef = doc(collection(db, "expenses"));
     await setDoc(newExpenseRef, {
         ...expenseData,
-        date: new Date().toISOString(),
+        date: new Date(),
         createdBy: currentUser.id,
     });
   };
@@ -192,7 +186,6 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
       const updatedData: Partial<User> = { ...data };
       if (data.name) {
           updatedData.initials = getInitials(data.name);
-          // Future improvement: update avatar as well
       }
       
       await updateDoc(userDocRef, updatedData);
@@ -201,7 +194,6 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const createGroup = async (name: string, memberEmails: string[]) => {
       if (!currentUser) throw new Error("Not authenticated");
 
-      const allEmails = [currentUser.email, ...memberEmails];
       const memberIds = new Set<string>([currentUser.id]);
       
       if (memberEmails.length > 0) {
@@ -246,12 +238,17 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
       }
 
       await batch.commit();
+      
+      // After updating members, fetch their user data if we don't have it
+      if (membersToAddIds.length > 0) {
+        fetchUsers(membersToAddIds);
+      }
   };
 
 
   
   const balances = useMemo(() => {
-    if (!currentUser) {
+    if (!currentUser || !users.length) {
         return { totalOwedToUser: 0, totalOwedByUser: 0, settlements: [] };
     }
     const userBalances: { [key: string]: number } = {};

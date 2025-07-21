@@ -22,13 +22,12 @@ import { useSettleSmart } from "@/context/settle-smart-context";
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const router = useRouter();
   const { toast } = useToast();
   const { login, currentUser, isLoading: isAuthLoading } = useSettleSmart();
 
   useEffect(() => {
-    // Redirect if the user is already logged in and no longer loading.
     if (!isAuthLoading && currentUser) {
       router.push("/");
     }
@@ -36,26 +35,25 @@ export default function LoginPage() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
+    setIsSubmitting(true);
     try {
       await login(email, password);
       toast({
         title: "Login Successful",
         description: "Welcome back! Redirecting...",
       });
-      // The useEffect hook will handle the redirection once currentUser is set.
+      // The useEffect will handle redirection.
     } catch (error: any) {
       toast({
         variant: "destructive",
         title: "Login Failed",
         description: error.message || "Please check your credentials and try again.",
       });
-       setIsLoading(false);
+       setIsSubmitting(false);
     }
   };
   
-  // Show a loading spinner if auth state is still being determined.
-  if (isAuthLoading) {
+  if (isAuthLoading || currentUser) {
      return (
       <div className="flex items-center justify-center min-h-screen bg-background">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -89,7 +87,7 @@ export default function LoginPage() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  disabled={isLoading}
+                  disabled={isSubmitting}
                 />
               </div>
               <div className="grid gap-2">
@@ -102,11 +100,11 @@ export default function LoginPage() {
                     required 
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    disabled={isLoading}
+                    disabled={isSubmitting}
                 />
               </div>
-              <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              <Button type="submit" className="w-full" disabled={isSubmitting}>
+                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Login
               </Button>
             </div>
