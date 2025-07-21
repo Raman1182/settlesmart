@@ -7,12 +7,13 @@ import { useSettleSmart } from "@/context/settle-smart-context";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Loader2, Send, Plus, UserPlus, Check, X, UserMinus, MessageSquare } from "lucide-react";
+import { Loader2, Plus, UserPlus, Check, X, UserMinus, MessageSquare, MoreVertical, Shield } from "lucide-react";
 import type { User, Friendship } from "@/lib/types";
 import { useToast } from "@/components/ui/use-toast";
 import { useRouter } from "next/navigation";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 
 export default function FriendsPage() {
@@ -158,15 +159,29 @@ export default function FriendsPage() {
                                   <p className="font-semibold">{friend.name}</p>
                                   <p className="text-sm text-muted-foreground">{friend.email}</p>
                               </div>
-                              <Button variant="ghost" size="icon" onClick={() => router.push(`/chat/${friend.id}`)} disabled={isProcessing} className="relative">
+                               <Button variant="ghost" size="icon" onClick={() => router.push(`/chat/${friend.id}`)} disabled={isProcessing} className="relative">
                                 <MessageSquare className="h-4 w-4" />
                                 {unreadCount > 0 && (
-                                    <Badge variant="destructive" className="absolute -top-1 -right-1 h-5 w-5 p-0 flex items-center justify-center text-xs">{unreadCount > 9 ? '9+' : unreadCount}</Badge>
+                                    <Badge variant="destructive" className="absolute top-0 right-0 h-4 w-4 p-0 flex items-center justify-center text-xs">{unreadCount > 9 ? '9+' : unreadCount}</Badge>
                                 )}
                               </Button>
-                              <Button variant="ghost" size="icon" onClick={() => handleRemoveFriend(friend.id)} disabled={isProcessing}>
-                                <UserMinus className="h-4 w-4 text-destructive" />
-                              </Button>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button variant="ghost" size="icon" disabled={isProcessing}>
+                                        <MoreVertical className="h-4 w-4" />
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                    <DropdownMenuItem onClick={() => handleRemoveFriend(friend.id)}>
+                                        <UserMinus className="mr-2 h-4 w-4 text-destructive" />
+                                        <span className="text-destructive">Unfriend</span>
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem disabled>
+                                        <Shield className="mr-2 h-4 w-4" />
+                                        <span>Trust Score</span>
+                                    </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
                           </div>
                         )})}
                          {friends.length === 0 && (
