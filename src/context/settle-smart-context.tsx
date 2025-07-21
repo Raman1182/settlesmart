@@ -82,24 +82,33 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
+    const authUnsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
       if (firebaseUser) {
-        const userDocRef = doc(db, "users", firebaseUser.uid);
-        const userDoc = await getDoc(userDocRef);
+        const userDocRef = doc(db, 'users', firebaseUser.uid);
+        const userUnsubscribe = onSnapshot(userDocRef, (doc) => {
+          if (doc.exists()) {
+            const userData = { id: doc.id, ...doc.data() } as User;
+            setCurrentUser(userData);
+            setUsers((prevUsers) => {
+              const userExists = prevUsers.some((u) => u.id === userData.id);
+              if (userExists) {
+                return prevUsers.map((u) => (u.id === userData.id ? userData : u));
+              }
+              return [...prevUsers, userData];
+            });
+          } else {
+             // This case might happen if user record is deleted from Firestore but not Auth
+            setCurrentUser(null);
+          }
+          setIsLoading(false);
+        }, (error) => {
+            console.error("Error listening to user document:", error);
+            setIsLoading(false);
+            setCurrentUser(null);
+        });
 
-        if (userDoc.exists()) {
-          const userData = { id: userDoc.id, ...userDoc.data() } as User;
-          setCurrentUser(userData);
-           setUsers(prevUsers => {
-                const userExists = prevUsers.some(u => u.id === userData.id);
-                if (userExists) {
-                    return prevUsers.map(u => u.id === userData.id ? userData : u);
-                }
-                return [...prevUsers, userData];
-             });
-        }
-        setIsLoading(false);
-
+        // Return the user doc listener unsubscribe function to be called on cleanup
+        return () => userUnsubscribe();
       } else {
         setCurrentUser(null);
         setGroups([]);
@@ -108,7 +117,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
       }
     });
 
-    return () => unsubscribe();
+    return () => authUnsubscribe();
   }, []);
   
   useEffect(() => {
