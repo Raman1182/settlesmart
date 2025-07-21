@@ -4,8 +4,8 @@
 import React, { createContext, useContext, useState, useMemo, useCallback, useEffect } from "react";
 import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged, User as FirebaseUser, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut } from "firebase/auth";
-import { collection, addDoc, query, where, onSnapshot, doc, updateDoc, serverTimestamp, getDocs, orderBy, deleteDoc, getDoc } from "firebase/firestore";
-import { sendFriendRequest, respondToFriendRequest } from "@/ai/flows/friend-request-flow";
+import { collection, addDoc, query, where, onSnapshot, doc, updateDoc, serverTimestamp, getDocs, orderBy, deleteDoc, getDoc, setDoc } from "firebase/firestore";
+import { sendFriendRequest as sendFriendRequestFlow, respondToFriendRequest } from "@/ai/flows/friend-request-flow";
 
 import type { User, Group, Expense, Participant, UnequalSplit, ChecklistItem, Message, Friendship } from "@/lib/types";
 import { users as mockUsers, groups as mockGroups, expenses as mockExpenses } from '@/lib/data';
@@ -72,7 +72,9 @@ const appDataStore = {
   users: [...mockUsers],
   groups: [...mockGroups],
   expenses: [...mockExpenses],
-  groupChecklists: {} as { [groupId: string]: ChecklistItem[] }
+  groupChecklists: {} as { [groupId: string]: ChecklistItem[] },
+  friendships: [] as Friendship[],
+  messages: [] as Message[]
 };
 
 
@@ -84,19 +86,17 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const [groups, setGroups] = useState<Group[]>(appDataStore.groups);
   const [expenses, setExpenses] = useState<Expense[]>(appDataStore.expenses.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
   const [groupChecklists, setGroupChecklists] = useState<{ [groupId: string]: ChecklistItem[] }>(appDataStore.groupChecklists);
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [friendships, setFriendships] = useState<Friendship[]>([]);
+  const [messages, setMessages] = useState<Message[]>(appDataStore.messages);
+  const [friendships, setFriendships] = useState<Friendship[]>(appDataStore.friendships);
 
 
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
         if (user) {
-            const userRef = doc(db, 'users', user.uid);
-            const userDoc = await getDoc(userRef);
-            if (userDoc.exists()) {
-                setCurrentUser({ id: user.uid, ...userDoc.data() } as User);
+            const existingUser = appDataStore.users.find(u => u.id === user.uid || u.email === user.email);
+            if (existingUser) {
+                setCurrentUser(existingUser);
             } else {
-                // If user doesn't exist in our mock data, create them
                 const newUserRecord: User = {
                     id: user.uid,
                     email: user.email!,
@@ -104,9 +104,9 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
                     avatar: `https://placehold.co/100x100?text=${user.email!.charAt(0).toUpperCase()}`,
                     initials: user.email!.charAt(0).toUpperCase(),
                 };
-                // await setDoc(userRef, newUserRecord); // This would be for a pure firestore app
                 appDataStore.users.push(newUserRecord);
                 setUsers(prev => [...prev, newUserRecord!]);
+                await setDoc(doc(db, "users", user.uid), { email: user.email, name: newUserRecord.name, avatar: newUserRecord.avatar, initials: newUserRecord.initials });
                 setCurrentUser(newUserRecord);
             }
         } else {
@@ -135,6 +135,9 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
             userFriendships.push({ id: doc.id, ...doc.data()} as Friendship);
         });
         setFriendships(userFriendships);
+        appDataStore.friendships = userFriendships;
+    }, (error) => {
+        console.error("Error fetching friendships:", error);
     });
 
     // Listener for messages
@@ -149,7 +152,12 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
                 createdAt: data.createdAt?.toDate().toISOString() || new Date().toISOString()
             } as Message
           });
-          setMessages(receivedMessages.sort((a,b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()));
+          const sortedMessages = receivedMessages.sort((a,b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+          setMessages(sortedMessages);
+          appDataStore.messages = sortedMessages;
+
+    }, (error) => {
+        console.error("Error fetching messages:", error);
     });
     
     return () => {
@@ -168,7 +176,6 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
         avatar: `https://placehold.co/100x100?text=${email.charAt(0).toUpperCase()}`,
         initials: email.charAt(0).toUpperCase(),
     };
-    // await setDoc(doc(db, "users", result.user.uid), newUserRecord);
     appDataStore.users.push(newUserRecord);
     setUsers([...appDataStore.users]);
     return result;
@@ -184,7 +191,22 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
   const sendFriendRequest = async (email: string) => {
     if (!currentUser) throw new Error("Not authenticated");
-    await sendFriendRequest({ fromUserId: currentUser.id, toUserEmail: email });
+    const toUser = users.find(u => u.email === email);
+    if (!toUser) throw new Error("User with that email does not exist.");
+    if (toUser.id === currentUser.id) throw new Error("You can't send a request to yourself.");
+
+    const existing = friendships.find(f => f.userIds.includes(toUser.id) && f.userIds.includes(currentUser.id));
+    if (existing) throw new Error("You are already friends or a request is pending.");
+    
+    await sendFriendRequestFlow({ fromUserId: currentUser.id, toUserEmail: email });
+    
+    const friendshipsRef = collection(db, 'friendships');
+    await addDoc(friendshipsRef, {
+        userIds: [currentUser.id, toUser.id],
+        status: 'pending',
+        requestedBy: currentUser.id,
+        createdAt: serverTimestamp(),
+    });
   }
 
   const acceptFriendRequest = async (friendshipId: string) => {
@@ -192,8 +214,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   }
 
   const rejectFriendRequest = async (friendshipId: string) => {
-     const friendshipRef = doc(db, 'friendships', friendshipId);
-     await deleteDoc(friendshipRef);
+    await respondToFriendRequest({ friendshipId, response: 'rejected' });
   }
   
    const getChatMessages = (friendId: string, callback: (messages: Message[]) => void) => {
@@ -206,7 +227,8 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     const unsubscribe = onSnapshot(query(collection(db, "messages")), () => {
         // This is a bit of a hack to re-run the filter when any message changes.
         // A more optimized approach would listen to a specific chat query.
-        const updatedMessages = messages.filter(m => m.chatId === chatId);
+        const allCurrentMessages = appDataStore.messages;
+        const updatedMessages = allCurrentMessages.filter(m => m.chatId === chatId);
         callback(updatedMessages)
     });
     
@@ -217,19 +239,18 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     if (!currentUser) throw new Error("Not authenticated");
     const chatId = [currentUser.id, receiverId].sort();
     
-    // Check if chat exists, if not create it
     const chatRef = doc(db, 'chats', chatId.join('_'));
     const chatDoc = await getDoc(chatRef);
 
     if(!chatDoc.exists()) {
-       await addDoc(collection(db, "chats"), {
+       await setDoc(chatRef, {
          id: chatId.join('_'),
          members: chatId,
        });
     }
 
     await addDoc(collection(db, "messages"), {
-      chatId: chatId, // Store as an array for querying
+      chatId: chatId, 
       senderId: currentUser.id,
       text,
       read: false,
@@ -289,12 +310,11 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
       
       const memberIds = new Set<string>([currentUser.id]);
       
-      // Query firestore for existing users by email
-      const usersRef = collection(db, 'users');
-      const q = query(usersRef, where('email', 'in', memberEmails));
-      const querySnapshot = await getDocs(q);
-      querySnapshot.forEach((doc) => {
-        memberIds.add(doc.id);
+      memberEmails.forEach(email => {
+        const user = users.find(u => u.email === email);
+        if (user) {
+            memberIds.add(user.id);
+        }
       });
       
       const newGroup: Group = {
@@ -306,6 +326,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
       };
       
       setGroups(prev => [...prev, newGroup]);
+      appDataStore.groups.push(newGroup);
   };
 
   const updateGroupMembers = async (groupId: string, memberEmailsToAdd: string[], memberIdsToRemove: string[]) => {

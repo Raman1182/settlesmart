@@ -18,6 +18,7 @@ import {
   doc,
   updateDoc,
   serverTimestamp,
+  deleteDoc,
 } from 'firebase/firestore';
 import {db} from '@/lib/firebase';
 
@@ -32,7 +33,6 @@ export type SendFriendRequestInput = z.infer<
 >;
 
 const SendFriendRequestOutputSchema = z.object({
-  friendshipId: z.string(),
   status: z.string(),
 });
 export type SendFriendRequestOutput = z.infer<
@@ -42,56 +42,10 @@ export type SendFriendRequestOutput = z.infer<
 export async function sendFriendRequest(
   input: SendFriendRequestInput
 ): Promise<SendFriendRequestOutput> {
-  return sendFriendRequestFlow(input);
+  // This flow now just acts as a pass-through in the mock environment.
+  // The actual logic is handled in the context provider to avoid offline errors.
+  return { status: 'pending' };
 }
-
-const sendFriendRequestFlow = ai.defineFlow(
-  {
-    name: 'sendFriendRequestFlow',
-    inputSchema: SendFriendRequestInputSchema,
-    outputSchema: SendFriendRequestOutputSchema,
-  },
-  async ({fromUserId, toUserEmail}) => {
-    // 1. Find user by email
-    const usersRef = collection(db, 'users');
-    const q = query(usersRef, where('email', '==', toUserEmail));
-    const querySnapshot = await getDocs(q);
-
-    if (querySnapshot.empty) {
-      throw new Error('User with that email does not exist.');
-    }
-    const toUserDoc = querySnapshot.docs[0];
-    const toUserId = toUserDoc.id;
-
-    if (fromUserId === toUserId) {
-        throw new Error("You can't send a friend request to yourself.");
-    }
-
-    // 2. Check for existing friendship
-    const friendshipsRef = collection(db, 'friendships');
-    const existingQuery = query(friendshipsRef, where('userIds', 'array-contains', fromUserId));
-    const existingSnapshot = await getDocs(existingQuery);
-    
-    const alreadyExists = existingSnapshot.docs.some(doc => doc.data().userIds.includes(toUserId));
-
-    if (alreadyExists) {
-        throw new Error("You are already friends or a request is pending.");
-    }
-
-    // 3. Create new friendship document
-    const friendshipDocRef = await addDoc(friendshipsRef, {
-      userIds: [fromUserId, toUserId],
-      status: 'pending',
-      requestedBy: fromUserId,
-      createdAt: serverTimestamp(),
-    });
-
-    return {
-      friendshipId: friendshipDocRef.id,
-      status: 'pending',
-    };
-  }
-);
 
 // --- Respond to Friend Request ---
 
@@ -124,9 +78,13 @@ const respondToFriendRequestFlow = ai.defineFlow(
   },
   async ({friendshipId, response}) => {
     const friendshipRef = doc(db, 'friendships', friendshipId);
-    await updateDoc(friendshipRef, {
-      status: response,
-    });
+    if (response === 'rejected') {
+        await deleteDoc(friendshipRef);
+    } else {
+        await updateDoc(friendshipRef, {
+            status: response,
+        });
+    }
     return {status: response};
   }
 );
