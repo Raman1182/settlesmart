@@ -277,10 +277,11 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const addExpense = async (expenseData: AddExpenseData) => {
      if (!currentUser || !db) throw new Error("No user found or DB not initialized");
     
+     const { isRecurring, ...restOfData } = expenseData;
+
      await addDoc(collection(db, "expenses"), {
-      ...expenseData,
-      isRecurring: undefined, // remove the form-only field
-      recurring: expenseData.isRecurring ? 'monthly' : null, // convert to new recurring field
+      ...restOfData,
+      recurring: isRecurring ? 'monthly' : null,
       date: new Date(),
       status: 'unsettled',
       settledAt: null,
