@@ -66,7 +66,7 @@ const expenseFormSchema = z.object({
     }
     return true;
 }, {
-    message: "The sum of the individual amounts must equal the total expense amount.",
+    message: "Whoops! The split amounts don't add up to the total expense.",
     path: ["unequalSplits"],
 });
 
@@ -170,7 +170,7 @@ export function AddExpenseSheet({ children, open, onOpenChange }: AddExpenseShee
           form.setValue("splitWith", finalParticipants);
 
           toast({
-            title: "Success: Expense Auto-filled",
+            title: "Sweet! Expense auto-filled.",
             description: "We've parsed the details. Please review and submit.",
           });
         }
@@ -178,7 +178,7 @@ export function AddExpenseSheet({ children, open, onOpenChange }: AddExpenseShee
         console.error("AI parsing failed:", error);
         toast({
           variant: "destructive",
-          title: "AI Parsing Failed",
+          title: "Oops! My AI brain hiccuped.",
           description: "We couldn't understand that. Please fill out the form manually.",
         });
       }
@@ -191,8 +191,8 @@ export function AddExpenseSheet({ children, open, onOpenChange }: AddExpenseShee
         const { category } = await categorizeExpense({ description: values.description });
         addExpense({ ...values, groupId: values.groupId || null, category: category || 'Other' });
         toast({
-            title: "Expense Added",
-            description: `The expense "${values.description}" has been successfully recorded.`,
+            title: "Expense Added!",
+            description: `Got it. "${values.description}" is on the books.`,
         });
         resetForm();
         setControlledOpen(false);
@@ -200,8 +200,8 @@ export function AddExpenseSheet({ children, open, onOpenChange }: AddExpenseShee
         console.error("Failed to add expense:", error);
         toast({
             variant: "destructive",
-            title: "Error Adding Expense",
-            description: "Something went wrong. Please try again.",
+            title: "Uh oh, something went wrong.",
+            description: "Couldn't save the expense. Please try again.",
         });
       }
     });

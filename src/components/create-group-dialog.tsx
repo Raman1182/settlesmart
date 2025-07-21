@@ -46,13 +46,13 @@ export function CreateGroupDialog({ children, open, onOpenChange }: CreateGroupD
     } else if(memberEmail === currentUser?.email) {
         toast({
             variant: "destructive",
-            title: "You are already a member",
-            description: "You are automatically included in any group you create.",
+            title: "You're already in!",
+            description: "You're automatically included in any group you create.",
         });
     } else {
          toast({
             variant: "destructive",
-            title: "Invalid Email",
+            title: "Hmm, that email doesn't look right.",
             description: "Please enter a valid, unique email address.",
         });
     }
@@ -77,8 +77,8 @@ export function CreateGroupDialog({ children, open, onOpenChange }: CreateGroupD
       try {
         await createGroup(groupName, memberEmails);
         toast({
-          title: "Group Created",
-          description: `The group "${groupName}" has been successfully created.`,
+          title: "Group Created!",
+          description: `The "${groupName}" group is all set up.`,
         });
         resetForm();
         setIsOpen(false);
