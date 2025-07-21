@@ -85,35 +85,21 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
       if (firebaseUser) {
         const userDocRef = doc(db, "users", firebaseUser.uid);
-        
-        const unsubUser = onSnapshot(userDocRef, (userDoc) => {
-           if (userDoc.exists()) {
-             const userData = { id: firebaseUser.uid, ...userDoc.data() } as User;
-             setCurrentUser(userData);
-             setUsers(prevUsers => {
+        const userDoc = await getDoc(userDocRef);
+
+        if (userDoc.exists()) {
+          const userData = { id: userDoc.id, ...userDoc.data() } as User;
+          setCurrentUser(userData);
+           setUsers(prevUsers => {
                 const userExists = prevUsers.some(u => u.id === userData.id);
                 if (userExists) {
                     return prevUsers.map(u => u.id === userData.id ? userData : u);
                 }
                 return [...prevUsers, userData];
              });
-           } else {
-            // This case is unlikely if signup is handled correctly but good as a fallback.
-            const name = firebaseUser.displayName || "New User";
-            const newUser: User = {
-                id: firebaseUser.uid,
-                name,
-                email: firebaseUser.email!,
-                avatar: `https://placehold.co/100x100?text=${getInitials(name)}`,
-                initials: getInitials(name),
-            };
-            setDoc(userDocRef, { name: newUser.name, email: newUser.email, avatar: newUser.avatar, initials: newUser.initials });
-            setCurrentUser(newUser);
-           }
-           setIsLoading(false);
-        });
+        }
+        setIsLoading(false);
 
-        return () => unsubUser();
       } else {
         setCurrentUser(null);
         setGroups([]);
