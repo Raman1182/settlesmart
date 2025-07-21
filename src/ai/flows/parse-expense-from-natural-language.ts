@@ -38,8 +38,12 @@ const prompt = ai.definePrompt({
 
   Given the following input, extract the amount, participants, and description of the expense. The current year is ${new Date().getFullYear()}.
 
+  - The words "me", "I", or "I paid" should be interpreted as a participant named "you".
+  - Extract all participant names mentioned.
+
   Example: "$50 for pizza with Alex and Ben" -> { amount: 50, participants: ["Alex", "Ben"], description: "Pizza" }
   Example: "I paid 1200 for last night's movie tickets for me, Chloe, and David" -> { amount: 1200, participants: ["you", "Chloe", "David"], description: "Movie tickets" }
+  Example: "2000 rupees for dinner with me, Chloe, and Rachel" -> { amount: 2000, participants: ["you", "Chloe", "Rachel"], description: "Dinner" }
 
   Input: {{{naturalLanguageInput}}}
 
