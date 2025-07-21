@@ -4,24 +4,30 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { Header } from "@/components/header";
 import { DashboardOverview } from "@/components/dashboard-overview";
 import { RecentExpenses } from "@/components/recent-expenses";
-import {
-  SidebarProvider,
-  SidebarInset,
-} from "@/components/ui/sidebar";
+import { SpendingByCategoryChart } from "./spending-by-category-chart";
+import { BalanceDetails } from "./balance-details";
+import { SpendingOverTimeChart } from "./spending-over-time-chart";
 
 export function Dashboard() {
   return (
-    <SidebarProvider>
-      <div className="flex min-h-screen w-full bg-muted/40">
-        <AppSidebar />
-        <SidebarInset>
-            <Header />
-            <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-8">
-              <DashboardOverview />
-              <RecentExpenses />
-            </main>
-        </SidebarInset>
+    <div className="grid min-h-screen w-full md:grid-cols-[240px_1fr] lg:grid-cols-[280px_1fr]">
+      <AppSidebar />
+      <div className="flex flex-col">
+        <Header />
+        <main className="flex flex-1 flex-col gap-4 p-4 sm:p-6 md:gap-8 md:p-8">
+          <DashboardOverview />
+          <div className="grid gap-4 md:gap-8 lg:grid-cols-2 xl:grid-cols-3">
+             <div className="lg:col-span-2 space-y-4 md:space-y-8">
+                 <SpendingOverTimeChart />
+                 <RecentExpenses />
+            </div>
+            <div className="space-y-4 md:space-y-8">
+                <BalanceDetails />
+                <SpendingByCategoryChart />
+            </div>
+          </div>
+        </main>
       </div>
-    </SidebarProvider>
+    </div>
   );
 }

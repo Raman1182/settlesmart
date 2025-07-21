@@ -16,7 +16,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useSettleSmart } from "@/context/settle-smart-context";
-import { LogOut, User as UserIcon } from "lucide-react";
+import { LogOut, Settings, User as UserIcon } from "lucide-react";
 
 export function UserNav() {
   const { currentUser } = useSettleSmart();
@@ -24,8 +24,8 @@ export function UserNav() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" className="relative h-8 w-8 rounded-full">
-          <Avatar className="h-9 w-9">
+        <Button variant="ghost" className="relative h-10 w-10 rounded-full">
+          <Avatar className="h-10 w-10">
             <AvatarImage src={currentUser.avatar} alt={currentUser.name} />
             <AvatarFallback>{currentUser.initials}</AvatarFallback>
           </Avatar>
@@ -42,14 +42,18 @@ export function UserNav() {
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
-          <DropdownMenuItem>
-            <UserIcon className="mr-2 h-4 w-4" />
+          <DropdownMenuItem disabled>
+            <UserIcon />
             <span>Profile</span>
+          </DropdownMenuItem>
+           <DropdownMenuItem disabled>
+            <Settings />
+            <span>Settings</span>
           </DropdownMenuItem>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
-        <DropdownMenuItem>
-          <LogOut className="mr-2 h-4 w-4" />
+        <DropdownMenuItem disabled>
+          <LogOut />
           <span>Log out</span>
         </DropdownMenuItem>
       </DropdownMenuContent>

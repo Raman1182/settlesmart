@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useTransition } from "react";
@@ -8,13 +9,14 @@ import {
   SheetDescription,
   SheetHeader,
   SheetTitle,
-  SheetTrigger,
   SheetFooter,
   SheetClose,
+  SheetTrigger,
 } from "@/components/ui/sheet";
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -28,10 +30,11 @@ import { z } from "zod";
 import { useSettleSmart } from "@/context/settle-smart-context";
 import { parseExpense } from "@/ai/flows/parse-expense-from-natural-language";
 import { categorizeExpense } from "@/ai/flows/categorize-expense";
-import { Loader2, Plus, Sparkles } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { DollarSign, Loader2, Plus, Sparkles, Users } from "lucide-react";
+import { useToast } from "@/components/ui/use-toast";
 import { Checkbox } from "./ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
+import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 
 const expenseFormSchema = z.object({
   description: z.string().min(2, {
@@ -50,7 +53,7 @@ export function AddExpenseSheet() {
   const [nlInput, setNlInput] = useState("");
   const [isParsing, startParsingTransition] = useTransition();
   const [isSubmitting, startSubmittingTransition] = useTransition();
-  const { addExpense, users, currentUser, groups } = useSettleSmart();
+  const { addExpense, users, currentUser, groups, findUserById } = useSettleSmart();
   const { toast } = useToast();
 
   const form = useForm<z.infer<typeof expenseFormSchema>>({
@@ -84,16 +87,16 @@ export function AddExpenseSheet() {
           form.setValue("splitWith", participantIds);
 
           toast({
-            title: "Expense Parsed!",
-            description: "We've filled in the details for you. Please review and submit.",
+            title: "Success: Expense Auto-filled",
+            description: "We've parsed the details. Please review and select a group before submitting.",
           });
         }
       } catch (error) {
         console.error("AI parsing failed:", error);
         toast({
           variant: "destructive",
-          title: "Uh oh! Something went wrong.",
-          description: "We couldn't parse that. Please try again or fill out the form manually.",
+          title: "AI Parsing Failed",
+          description: "We couldn't understand that. Please fill out the form manually.",
         });
       }
     });
@@ -105,50 +108,57 @@ export function AddExpenseSheet() {
         const { category } = await categorizeExpense({ description: values.description });
         addExpense({ ...values, category: category || 'Other' });
         toast({
-            title: "Expense Added!",
-            description: `"${values.description}" has been added.`,
+            title: "Expense Added",
+            description: `The expense "${values.description}" has been successfully recorded.`,
         });
-        form.reset();
+        form.reset({
+          description: "",
+          amount: 0,
+          paidById: currentUser.id,
+          splitWith: [],
+          groupId: "",
+        });
         setNlInput("");
         setIsOpen(false);
       } catch (error) {
         console.error("Failed to add expense:", error);
         toast({
             variant: "destructive",
-            title: "Submission Failed",
-            description: "There was a problem adding your expense.",
+            title: "Error Adding Expense",
+            description: "Something went wrong. Please try again.",
         });
       }
     });
   };
   
   const selectedGroupId = form.watch("groupId");
-  const membersOfSelectedGroup = groups.find(g => g.id === selectedGroupId)?.members.map(id => users.find(u => u.id === id)).filter(Boolean) as any[];
+  const membersOfSelectedGroup = groups.find(g => g.id === selectedGroupId)?.members.map(id => findUserById(id)).filter(Boolean) as any[];
 
 
   return (
     <Sheet open={isOpen} onOpenChange={setIsOpen}>
       <SheetTrigger asChild>
-        <Button size="sm" className="gap-1">
-          <Plus className="h-4 w-4" />
+        <Button>
+          <Plus className="h-4 w-4 mr-2" />
           Add Expense
         </Button>
       </SheetTrigger>
-      <SheetContent className="flex flex-col gap-0 p-0">
+      <SheetContent className="flex flex-col gap-0 p-0 sm:max-w-lg">
         <SheetHeader className="p-6">
-          <SheetTitle>Add a New Expense</SheetTitle>
+          <SheetTitle>Log a New Expense</SheetTitle>
           <SheetDescription>
-            Describe your expense in plain English or fill out the form below.
+            Describe your expense in plain English for our AI to parse, or fill out the form manually.
           </SheetDescription>
         </SheetHeader>
-        <div className="p-6 border-t space-y-4">
+        <div className="p-6 border-y bg-muted/50">
             <Textarea
-                placeholder="e.g., '$25 for pizza with Alice and Bob'"
+                placeholder="e.g., $25 for pizza with Alice and Bob for the apartment"
                 value={nlInput}
                 onChange={(e) => setNlInput(e.target.value)}
                 rows={3}
+                className="bg-background"
             />
-            <Button onClick={handleParse} disabled={isParsing || !nlInput} className="w-full">
+            <Button onClick={handleParse} disabled={isParsing || !nlInput} className="w-full mt-4">
                 {isParsing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
                 Parse with AI
             </Button>
@@ -156,7 +166,7 @@ export function AddExpenseSheet() {
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="flex-1 overflow-y-auto">
-          <div className="space-y-4 p-6 border-t">
+          <div className="space-y-6 p-6">
               <FormField
                 control={form.control}
                 name="description"
@@ -170,19 +180,47 @@ export function AddExpenseSheet() {
                   </FormItem>
                 )}
               />
-              <FormField
+               <FormField
                 control={form.control}
                 name="amount"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Amount ($)</FormLabel>
+                    <FormLabel>Amount</FormLabel>
                     <FormControl>
-                      <Input type="number" placeholder="0.00" {...field} />
+                      <div className="relative">
+                        <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input type="number" placeholder="0.00" className="pl-8" {...field} />
+                      </div>
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
+              <FormField
+                control={form.control}
+                name="groupId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Group</FormLabel>
+                      <Select onValueChange={(value) => {
+                          field.onChange(value);
+                          const groupMembers = groups.find(g => g.id === value)?.members || [];
+                          form.setValue("splitWith", groupMembers);
+                      }} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a group..." />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {groups.map(group => <SelectItem key={group.id} value={group.id}>{group.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
               <div className="grid grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
@@ -197,30 +235,17 @@ export function AddExpenseSheet() {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {users.map(user => <SelectItem key={user.id} value={user.id}>{user.name}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                 <FormField
-                  control={form.control}
-                  name="groupId"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Group</FormLabel>
-                       <Select onValueChange={(value) => {
-                           field.onChange(value);
-                           form.setValue("splitWith", []);
-                       }} defaultValue={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select a group" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {groups.map(group => <SelectItem key={group.id} value={group.id}>{group.name}</SelectItem>)}
+                          {users.map(user => (
+                            <SelectItem key={user.id} value={user.id}>
+                              <div className="flex items-center gap-2">
+                                <Avatar className="h-6 w-6">
+                                  <AvatarImage src={user.avatar} alt={user.name} />
+                                  <AvatarFallback>{user.initials}</AvatarFallback>
+                                </Avatar>
+                                <span>{user.name}</span>
+                              </div>
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                       <FormMessage />
@@ -229,58 +254,67 @@ export function AddExpenseSheet() {
                 />
               </div>
 
-             {selectedGroupId && <FormField
-                control={form.control}
-                name="splitWith"
-                render={() => (
-                  <FormItem>
-                    <div className="mb-4">
-                      <FormLabel className="text-base">Split with</FormLabel>
-                    </div>
-                    {membersOfSelectedGroup.map((item) => (
-                      <FormField
-                        key={item.id}
-                        control={form.control}
-                        name="splitWith"
-                        render={({ field }) => {
-                          return (
-                            <FormItem
-                              key={item.id}
-                              className="flex flex-row items-start space-x-3 space-y-0"
-                            >
-                              <FormControl>
-                                <Checkbox
-                                  checked={field.value?.includes(item.id)}
-                                  onCheckedChange={(checked) => {
-                                    return checked
-                                      ? field.onChange([...field.value, item.id])
-                                      : field.onChange(
-                                          field.value?.filter(
-                                            (value) => value !== item.id
-                                          )
-                                        )
-                                  }}
-                                />
-                              </FormControl>
-                              <FormLabel className="font-normal">
-                                {item.name}
-                              </FormLabel>
-                            </FormItem>
-                          )
-                        }}
-                      />
-                    ))}
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />}
+             {selectedGroupId && (
+                <FormField
+                    control={form.control}
+                    name="splitWith"
+                    render={() => (
+                    <FormItem>
+                        <div>
+                            <FormLabel className="text-base">Split between</FormLabel>
+                            <FormDescription>Select who this expense should be split with.</FormDescription>
+                        </div>
+                        <div className="space-y-3 pt-2">
+                        {membersOfSelectedGroup.map((item) => (
+                            <FormField
+                            key={item.id}
+                            control={form.control}
+                            name="splitWith"
+                            render={({ field }) => {
+                                return (
+                                <FormItem
+                                    key={item.id}
+                                    className="flex flex-row items-center space-x-3 space-y-0"
+                                >
+                                    <FormControl>
+                                    <Checkbox
+                                        checked={field.value?.includes(item.id)}
+                                        onCheckedChange={(checked) => {
+                                        return checked
+                                            ? field.onChange([...field.value, item.id])
+                                            : field.onChange(
+                                                field.value?.filter(
+                                                (value) => value !== item.id
+                                                )
+                                            )
+                                        }}
+                                    />
+                                    </FormControl>
+                                    <FormLabel className="font-normal flex items-center gap-2">
+                                         <Avatar className="h-8 w-8">
+                                            <AvatarImage src={item.avatar} alt={item.name} />
+                                            <AvatarFallback>{item.initials}</AvatarFallback>
+                                        </Avatar>
+                                        {item.name}
+                                    </FormLabel>
+                                </FormItem>
+                                )
+                            }}
+                            />
+                        ))}
+                        </div>
+                        <FormMessage />
+                    </FormItem>
+                    )}
+                />
+             )}
             </div>
 
             <SheetFooter className="p-6 bg-muted/40 border-t mt-auto">
               <SheetClose asChild>
                 <Button variant="outline">Cancel</Button>
               </SheetClose>
-              <Button type="submit" disabled={isSubmitting}>
+              <Button type="submit" disabled={isSubmitting || !form.formState.isValid}>
                 {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Add Expense
               </Button>
