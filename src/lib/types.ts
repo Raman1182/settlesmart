@@ -1,5 +1,3 @@
-
-
 export type User = {
   id: string; // This will be the Firebase Auth UID
   name: string;
@@ -47,4 +45,20 @@ export interface ChecklistItem {
   id: string;
   name: string;
   completed: boolean;
+}
+
+export interface Friendship {
+  id: string;
+  requesterId: string;
+  receiverId: string;
+  status: 'pending' | 'accepted' | 'declined';
+  createdAt: any;
+}
+
+export interface Message {
+  id: string;
+  chatId: string;
+  senderId: string;
+  text: string;
+  timestamp: any;
 }

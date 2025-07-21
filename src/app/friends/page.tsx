@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useMemo, useState, useTransition, useEffect } from "react";
@@ -7,36 +6,27 @@ import { useSettleSmart } from "@/context/settle-smart-context";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { formatCurrency } from "@/lib/utils";
-import { ArrowLeftRight, Loader2, MoreVertical, ShieldCheck, Send, Plus, UserPlus, Check, X } from "lucide-react";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import type { User } from "@/lib/types";
+import { Loader2, Send, Plus, UserPlus, Check, X, UserMinus, MessageSquare } from "lucide-react";
+import type { User, Friendship } from "@/lib/types";
 import { useToast } from "@/components/ui/use-toast";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { TrustScoreIndicator } from "@/components/trust-score-indicator";
 import { useRouter } from "next/navigation";
-import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-
-
-interface FriendWithBalance {
-    id: string;
-    name: string;
-    email?: string;
-    avatar?: string;
-    initials: string;
-    balance: number;
-    isRegistered: boolean;
-}
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 
 export default function FriendsPage() {
-  const { users, currentUser, balances, settleFriendDebt, isAuthLoading } = useSettleSmart();
+  const { 
+    users, 
+    currentUser, 
+    isAuthLoading, 
+    friendships, 
+    sendFriendRequest, 
+    acceptFriendRequest, 
+    declineFriendRequest,
+    removeFriend
+  } = useSettleSmart();
   const { toast } = useToast();
-  const [settleFriend, setSettleFriend] = useState<FriendWithBalance | null>(null);
-  const [isSettling, startSettleTransition] = useTransition();
   const router = useRouter();
+  const [isProcessing, startProcessingTransition] = useTransition();
   
   useEffect(() => {
     if (!isAuthLoading && !currentUser) {
@@ -44,76 +34,74 @@ export default function FriendsPage() {
     }
   }, [isAuthLoading, currentUser, router]);
 
-  const friendsWithBalances = useMemo(() => {
-    if (!currentUser) return [];
-    
-    const friendMap: Map<string, FriendWithBalance> = new Map();
-     users.forEach(u => {
-        if (u.id !== currentUser.id) {
-            friendMap.set(u.id, {
-                id: u.id,
-                name: u.name,
-                email: u.email,
-                avatar: u.avatar,
-                initials: u.initials,
-                balance: 0,
-                isRegistered: !!u.email,
-            });
-        }
-    });
+  const { friends, friendRequests, otherUsers } = useMemo(() => {
+    if (!currentUser) return { friends: [], friendRequests: [], otherUsers: [] };
 
-    balances.settlements.forEach(s => {
-      let friendId: string | undefined;
-      if (s.from.id === currentUser.id) friendId = s.to.id;
-      else if (s.to.id === currentUser.id) friendId = s.from.id;
+    const currentFriends: User[] = [];
+    const requests: { friendship: Friendship, user: User }[] = [];
+    const myFriendshipIds = new Set<string>();
 
-      if (friendId && friendId !== currentUser.id) {
-        let friend = friendMap.get(friendId);
-        if (friend) {
-          if (s.from.id === currentUser.id) friend.balance -= s.amount;
-          else friend.balance += s.amount;
+    friendships.forEach(f => {
+      if (f.status === 'accepted') {
+        const friendId = f.requesterId === currentUser.id ? f.receiverId : f.requesterId;
+        const user = users.find(u => u.id === friendId);
+        if (user) {
+          currentFriends.push(user);
+          myFriendshipIds.add(user.id);
         }
+      } else if (f.status === 'pending' && f.receiverId === currentUser.id) {
+         const user = users.find(u => u.id === f.requesterId);
+         if (user) requests.push({ friendship: f, user });
       }
     });
-    
-    return Array.from(friendMap.values())
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }, [users, currentUser, balances]);
-  
-  const handleSettle = () => {
-    if (!settleFriend) return;
-    startSettleTransition(async () => {
-        try {
-            await settleFriendDebt(settleFriend.id);
-            toast({
-                title: `Settled with ${settleFriend.name}!`,
-                description: "Your balance is now clear."
-            });
-            setSettleFriend(null);
-        } catch(error: any) {
-             toast({
-                variant: "destructive",
-                title: "Error settling up",
-                description: error.message,
-            });
-        }
-    });
-  }
 
-  const getFriendTrustScore = (balance: number) => {
-    let score = 50; 
-    if (balance > 0) score -= Math.min(40, Math.log(balance + 1) * 5);
-    if (balance < 0) score += Math.min(30, Math.log(Math.abs(balance) + 1) * 3);
-    return Math.max(0, Math.min(100, score));
-  }
+    const nonFriendUsers = users.filter(u => u.id !== currentUser.id && !myFriendshipIds.has(u.id));
+
+    return { friends: currentFriends, friendRequests: requests, otherUsers: nonFriendUsers };
+  }, [users, currentUser, friendships]);
   
-  const handleShowTrustScore = (friend: FriendWithBalance) => {
-      const score = getFriendTrustScore(friend.balance);
-      const scoreType = friend.isRegistered ? "Public" : "Personal";
-      toast({
-          title: `${friend.name}'s Trust Score`,
-          description: `${scoreType} Trust Score is ${score.toFixed(0)}. This is calculated based on your shared financial history.`
-      })
+  const handleSendRequest = (receiverId: string) => {
+    startProcessingTransition(async () => {
+      try {
+        await sendFriendRequest(receiverId);
+        toast({ title: "Friend request sent!" });
+      } catch (error: any) {
+        toast({ variant: "destructive", title: "Error", description: error.message });
+      }
+    });
+  };
+
+  const handleAcceptRequest = (friendshipId: string) => {
+    startProcessingTransition(async () => {
+      try {
+        await acceptFriendRequest(friendshipId);
+        toast({ title: "Friend request accepted!" });
+      } catch (error: any) {
+        toast({ variant: "destructive", title: "Error", description: error.message });
+      }
+    });
+  };
+
+  const handleDeclineRequest = (friendshipId: string) => {
+     startProcessingTransition(async () => {
+      try {
+        await declineFriendRequest(friendshipId);
+        toast({ title: "Friend request declined." });
+      } catch (error: any) {
+        toast({ variant: "destructive", title: "Error", description: error.message });
+      }
+    });
+  };
+
+  const handleRemoveFriend = (friendId: string) => {
+     startProcessingTransition(async () => {
+      try {
+        await removeFriend(friendId);
+        toast({ title: "Friend removed." });
+      } catch (error: any) {
+        toast({ variant: "destructive", title: "Error", description: error.message });
+      }
+    });
   }
   
   if (isAuthLoading || !currentUser) {
@@ -127,83 +115,125 @@ export default function FriendsPage() {
   return (
     <>
       <div className="flex flex-col min-h-screen w-full">
-        <Header pageTitle="Contacts" />
+        <Header pageTitle="Friends" />
         <main className="flex-1 p-4 sm:p-6 md:p-8 space-y-8">
-            <Card>
-                <CardHeader className="flex flex-row items-center justify-between">
-                    <div>
-                        <CardTitle>Your Contacts</CardTitle>
-                        <CardDescription>All users on the SettleSmart platform.</CardDescription>
-                    </div>
-                </CardHeader>
-                <CardContent>
-                    <div className="space-y-4">
-                        {friendsWithBalances.map(friend => (
-                        <div key={friend.id} className="flex items-center gap-4 p-2 rounded-lg hover:bg-muted/50">
-                            <Avatar className="h-10 w-10">
-                                <AvatarImage src={friend.avatar} alt={friend.name} />
-                                <AvatarFallback>{friend.initials}</AvatarFallback>
-                            </Avatar>
-                            <div className="flex-1">
-                                <p className="font-semibold">{friend.name}</p>
-                                <p className={`text-sm ${friend.balance > 0.01 ? 'text-green-500' : friend.balance < -0.01 ? 'text-red-500' : 'text-muted-foreground'}`}>
-                                    {friend.balance > 0.01 ? `Owes you ${formatCurrency(Math.abs(friend.balance))}` : friend.balance < -0.01 ? `You owe ${formatCurrency(Math.abs(friend.balance))}` : 'Settled up'}
-                                </p>
-                            </div>
-                             <div className="w-24">
-                                <TrustScoreIndicator score={getFriendTrustScore(friend.balance)} />
-                             </div>
-                             <AlertDialog onOpenChange={(open) => { if (!open) setSettleFriend(null); }}>
-                                <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                        <Button variant="ghost" size="icon">
-                                            <MoreVertical className="h-4 w-4" />
-                                        </Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end">
-                                        <AlertDialogTrigger asChild>
-                                            <DropdownMenuItem disabled={Math.abs(friend.balance) < 0.01} onSelect={() => setSettleFriend(friend)}>
-                                                <ArrowLeftRight className="mr-2 h-4 w-4" />
-                                                Settle Up
-                                            </DropdownMenuItem>
-                                        </AlertDialogTrigger>
-                                        <DropdownMenuItem onClick={() => handleShowTrustScore(friend)}>
-                                            <ShieldCheck className="mr-2 h-4 w-4" />
-                                            View Trust Score
-                                        </DropdownMenuItem>
-                                    </DropdownMenuContent>
-                                </DropdownMenu>
-                                <AlertDialogContent>
-                                    {settleFriend && (
-                                        <>
-                                            <AlertDialogHeader>
-                                                <AlertDialogTitle>Settle with {settleFriend.name}?</AlertDialogTitle>
-                                                <AlertDialogDescription>
-                                                    This will mark your balance of {formatCurrency(Math.abs(settleFriend.balance || 0))} with {settleFriend.name} as settled. This action assumes an offline payment was made and will remove the debt from the system.
-                                                </AlertDialogDescription>
-                                            </AlertDialogHeader>
-                                            <AlertDialogFooter>
-                                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                                <AlertDialogAction onClick={handleSettle} disabled={isSettling}>
-                                                    {isSettling && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                                    Confirm Settlement
-                                                </AlertDialogAction>
-                                            </AlertDialogFooter>
-                                        </>
-                                    )}
-                                </AlertDialogContent>
-                             </AlertDialog>
-                        </div>
+            <Tabs defaultValue="friends" className="w-full">
+              <TabsList className="grid w-full grid-cols-3">
+                <TabsTrigger value="friends">Friends</TabsTrigger>
+                <TabsTrigger value="requests">
+                  Requests {friendRequests.length > 0 && <span className="ml-2 bg-primary text-primary-foreground h-5 w-5 text-xs rounded-full flex items-center justify-center">{friendRequests.length}</span>}
+                </TabsTrigger>
+                <TabsTrigger value="discover">Discover</TabsTrigger>
+              </TabsList>
+              
+              <TabsContent value="friends">
+                 <Card>
+                    <CardHeader>
+                        <CardTitle>Your Friends</CardTitle>
+                        <CardDescription>Your connections on SettleSmart.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-4">
+                        {friends.map(friend => (
+                          <div key={friend.id} className="flex items-center gap-4 p-2 rounded-lg hover:bg-muted/50">
+                              <Avatar className="h-10 w-10">
+                                  <AvatarImage src={friend.avatar} alt={friend.name} />
+                                  <AvatarFallback>{friend.initials}</AvatarFallback>
+                              </Avatar>
+                              <div className="flex-1">
+                                  <p className="font-semibold">{friend.name}</p>
+                                  <p className="text-sm text-muted-foreground">{friend.email}</p>
+                              </div>
+                              <Button variant="ghost" size="icon" onClick={() => router.push(`/chat/${friend.id}`)} disabled={isProcessing}>
+                                <MessageSquare className="h-4 w-4" />
+                              </Button>
+                              <Button variant="ghost" size="icon" onClick={() => handleRemoveFriend(friend.id)} disabled={isProcessing}>
+                                <UserMinus className="h-4 w-4 text-destructive" />
+                              </Button>
+                          </div>
                         ))}
-                        {friendsWithBalances.length === 0 && (
+                         {friends.length === 0 && (
                             <div className="col-span-full flex flex-col items-center justify-center text-center text-muted-foreground h-full rounded-lg border-2 border-dashed border-muted/50 py-12">
-                                <h3 className="text-xl font-bold mb-2">No other users yet</h3>
-                                <p className="mb-4">You're the first one here! Invite others to join.</p>
+                                <h3 className="text-xl font-bold mb-2">No friends yet</h3>
+                                <p className="mb-4">Find users in the "Discover" tab to add friends.</p>
                             </div>
                         )}
-                    </div>
-                </CardContent>
-            </Card>
+                      </div>
+                    </CardContent>
+                </Card>
+              </TabsContent>
+              
+              <TabsContent value="requests">
+                 <Card>
+                    <CardHeader>
+                        <CardTitle>Friend Requests</CardTitle>
+                        <CardDescription>People who want to connect with you.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                       <div className="space-y-4">
+                          {friendRequests.map(({ friendship, user }) => (
+                            <div key={friendship.id} className="flex items-center gap-4 p-2 rounded-lg hover:bg-muted/50">
+                                <Avatar className="h-10 w-10">
+                                    <AvatarImage src={user.avatar} alt={user.name} />
+                                    <AvatarFallback>{user.initials}</AvatarFallback>
+                                </Avatar>
+                                <div className="flex-1">
+                                    <p className="font-semibold">{user.name}</p>
+                                    <p className="text-sm text-muted-foreground">{user.email}</p>
+                                </div>
+                                <Button variant="outline" size="icon" onClick={() => handleAcceptRequest(friendship.id)} disabled={isProcessing}>
+                                  <Check className="h-4 w-4 text-green-500" />
+                                </Button>
+                                <Button variant="outline" size="icon" onClick={() => handleDeclineRequest(friendship.id)} disabled={isProcessing}>
+                                  <X className="h-4 w-4 text-red-500" />
+                                </Button>
+                            </div>
+                          ))}
+                           {friendRequests.length === 0 && (
+                              <div className="col-span-full flex flex-col items-center justify-center text-center text-muted-foreground h-full rounded-lg border-2 border-dashed border-muted/50 py-12">
+                                  <h3 className="text-xl font-bold mb-2">No new friend requests</h3>
+                                  <p className="mb-4">Check back later!</p>
+                              </div>
+                          )}
+                       </div>
+                    </CardContent>
+                </Card>
+              </TabsContent>
+              
+              <TabsContent value="discover">
+                  <Card>
+                    <CardHeader>
+                        <CardTitle>Discover Users</CardTitle>
+                        <CardDescription>Find and add other users on SettleSmart.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="space-y-4">
+                            {otherUsers.map(user => (
+                            <div key={user.id} className="flex items-center gap-4 p-2 rounded-lg hover:bg-muted/50">
+                                <Avatar className="h-10 w-10">
+                                    <AvatarImage src={user.avatar} alt={user.name} />
+                                    <AvatarFallback>{user.initials}</AvatarFallback>
+                                </Avatar>
+                                <div className="flex-1">
+                                    <p className="font-semibold">{user.name}</p>
+                                     <p className="text-sm text-muted-foreground">{user.email}</p>
+                                </div>
+                                <Button size="icon" onClick={() => handleSendRequest(user.id)} disabled={isProcessing}>
+                                  <UserPlus className="h-4 w-4" />
+                                </Button>
+                            </div>
+                            ))}
+                            {otherUsers.length === 0 && (
+                                <div className="col-span-full flex flex-col items-center justify-center text-center text-muted-foreground h-full rounded-lg border-2 border-dashed border-muted/50 py-12">
+                                    <h3 className="text-xl font-bold mb-2">You know everyone!</h3>
+                                    <p className="mb-4">There are no other users to add right now.</p>
+                                </div>
+                            )}
+                        </div>
+                    </CardContent>
+                </Card>
+              </TabsContent>
+            </Tabs>
         </main>
       </div>
     </>

@@ -1,12 +1,11 @@
-
 "use client";
 
 import React, { createContext, useContext, useState, useMemo, useCallback, useEffect } from "react";
 import { initializeApp, getApps, getApp, type FirebaseApp } from "firebase/app";
 import { getAuth, onAuthStateChanged, User as FirebaseUser, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut, type Auth } from "firebase/auth";
-import { getFirestore, collection, addDoc, query, where, onSnapshot, doc, updateDoc, serverTimestamp, getDocs, orderBy, deleteDoc, getDoc, setDoc, arrayUnion, arrayRemove, writeBatch, type Firestore, enableIndexedDbPersistence } from "firebase/firestore";
+import { getFirestore, collection, addDoc, query, where, onSnapshot, doc, updateDoc, serverTimestamp, getDocs, orderBy, deleteDoc, getDoc, setDoc, arrayUnion, arrayRemove, writeBatch, type Firestore, enableIndexedDbPersistence, limit } from "firebase/firestore";
 import { firebaseConfig } from "@/lib/firebase";
-import type { User, Group, Expense, Participant, UnequalSplit, ChecklistItem } from "@/lib/types";
+import type { User, Group, Expense, Participant, UnequalSplit, ChecklistItem, Friendship, Message } from "@/lib/types";
 
 interface AddExpenseData {
   description: string;
@@ -26,6 +25,7 @@ interface SettleSmartContextType {
   users: User[];
   groups: Group[];
   expenses: Expense[];
+  friendships: Friendship[];
   addExpense: (expense: AddExpenseData) => void;
   balances: {
     totalOwedToUser: number;
@@ -49,6 +49,12 @@ interface SettleSmartContextType {
   settleFriendDebt: (friendId: string) => Promise<void>;
   simplifyGroupDebts: (groupId: string) => { from: User, to: User, amount: number }[];
   settleAllInGroup: (groupId: string) => void;
+  sendFriendRequest: (receiverId: string) => Promise<void>;
+  acceptFriendRequest: (friendshipId: string) => Promise<void>;
+  declineFriendRequest: (friendshipId: string) => Promise<void>;
+  removeFriend: (friendId: string) => Promise<void>;
+  getChatMessages: (friendId: string, callback: (messages: Message[]) => void) => () => void;
+  sendMessage: (friendId: string, text: string) => Promise<void>;
   signUp: (email: string, pass: string) => Promise<any>;
   signIn: (email: string, pass: string) => Promise<any>;
   signOut: () => Promise<void>;
@@ -64,6 +70,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const [users, setUsers] = useState<User[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [friendships, setFriendships] = useState<Friendship[]>([]);
   const [groupChecklists, setGroupChecklists] = useState<{ [groupId: string]: ChecklistItem[] }>({});
 
   const [auth, setAuth] = useState<Auth | null>(null);
@@ -128,6 +135,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
     let unsubUsers: () => void = () => {};
     let unsubGroups: () => void = () => {};
+    let unsubFriendships: () => void = () => {};
 
     if (currentUser) {
         unsubUsers = onSnapshot(collection(db, "users"), (snapshot) => {
@@ -144,17 +152,27 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
         }, (error) => {
             console.error("Error in 'groups' listener:", error);
         });
+        
+        const qFriendships = query(collection(db, "friendships"), where("participantIds", "array-contains", currentUser.id));
+        unsubFriendships = onSnapshot(qFriendships, (snapshot) => {
+            const userFriendships = snapshot.docs.map(doc => ({id: doc.id, ...doc.data() } as Friendship));
+            setFriendships(userFriendships);
+        }, (error) => {
+            console.error("Error in 'friendships' listener:", error)
+        });
 
     } else {
         setUsers([]);
         setGroups([]);
         setExpenses([]);
+        setFriendships([]);
         setGroupChecklists({});
     }
 
     return () => {
         unsubUsers();
         unsubGroups();
+        unsubFriendships();
     };
   }, [currentUser, isAuthLoading, db]);
   
@@ -332,6 +350,84 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     snapshot.forEach(doc => batch.delete(doc.ref));
     await batch.commit();
   };
+  
+  // Friendship and Messaging Logic
+  const sendFriendRequest = async (receiverId: string) => {
+    if (!currentUser || !db) throw new Error("Not authenticated");
+    const friendshipQuery = query(
+      collection(db, "friendships"),
+      where("participantIds", "in", [[currentUser.id, receiverId], [receiverId, currentUser.id]])
+    );
+    const existingFriendship = await getDocs(friendshipQuery);
+    if (!existingFriendship.empty) {
+      throw new Error("Friendship request already exists.");
+    }
+    
+    await addDoc(collection(db, "friendships"), {
+      requesterId: currentUser.id,
+      receiverId: receiverId,
+      status: 'pending',
+      participantIds: [currentUser.id, receiverId],
+      createdAt: serverTimestamp()
+    });
+  };
+
+  const acceptFriendRequest = async (friendshipId: string) => {
+    if (!db) return;
+    const friendshipRef = doc(db, "friendships", friendshipId);
+    await updateDoc(friendshipRef, { status: 'accepted' });
+  };
+  
+  const declineFriendRequest = async (friendshipId: string) => {
+    if (!db) return;
+    await deleteDoc(doc(db, "friendships", friendshipId));
+  };
+  
+  const removeFriend = async (friendId: string) => {
+    if (!currentUser || !db) return;
+    const friendshipQuery = query(
+      collection(db, "friendships"),
+      where("participantIds", "in", [[currentUser.id, friendId], [friendId, currentUser.id]]),
+      where("status", "==", "accepted"),
+      limit(1)
+    );
+    const friendshipSnapshot = await getDocs(friendshipQuery);
+    if (!friendshipSnapshot.empty) {
+      await deleteDoc(friendshipSnapshot.docs[0].ref);
+    } else {
+        throw new Error("Friendship not found.");
+    }
+  };
+  
+  const getChatId = (user1: string, user2: string) => {
+    return [user1, user2].sort().join('_');
+  };
+
+  const getChatMessages = (friendId: string, callback: (messages: Message[]) => void) => {
+    if (!currentUser || !db) return () => {};
+    const chatId = getChatId(currentUser.id, friendId);
+    const messagesQuery = query(collection(db, `chats/${chatId}/messages`), orderBy("timestamp", "asc"));
+    
+    return onSnapshot(messagesQuery, (snapshot) => {
+      const messages = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        timestamp: doc.data().timestamp?.toDate().toISOString() || new Date().toISOString()
+      } as Message));
+      callback(messages);
+    });
+  };
+
+  const sendMessage = async (friendId: string, text: string) => {
+    if (!currentUser || !db) throw new Error("Not authenticated");
+    const chatId = getChatId(currentUser.id, friendId);
+    await addDoc(collection(db, `chats/${chatId}/messages`), {
+      chatId,
+      senderId: currentUser.id,
+      text,
+      timestamp: serverTimestamp(),
+    });
+  };
 
   const calculateSettlements = useCallback((expensesToCalculate: Expense[], allParticipantIds: string[]) => {
     const userBalances: { [key: string]: number } = {};
@@ -461,6 +557,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     users,
     groups,
     expenses,
+    friendships,
     addExpense,
     balances,
     getGroupBalances,
@@ -474,6 +571,12 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     settleFriendDebt,
     simplifyGroupDebts,
     settleAllInGroup,
+    sendFriendRequest,
+    acceptFriendRequest,
+    declineFriendRequest,
+    removeFriend,
+    getChatMessages,
+    sendMessage,
     signUp,
     signIn,
     signOut,
@@ -494,5 +597,3 @@ export const useSettleSmart = (): SettleSmartContextType => {
   }
   return context;
 };
-
-    
