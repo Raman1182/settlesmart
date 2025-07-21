@@ -20,7 +20,7 @@ interface GroupMembersProps {
 }
 
 export function GroupMembers({ group, isOwner }: GroupMembersProps) {
-  const { findUserById, currentUser, isLoading: isAuthLoading, updateGroupMembers, deleteGroup, leaveGroup, getGroupBalances } = useSettleSmart();
+  const { findUserById, currentUser, isAuthLoading, updateGroupMembers, deleteGroup, leaveGroup, getGroupBalances } = useSettleSmart();
   const { toast } = useToast();
 
   const [newMemberEmail, setNewMemberEmail] = useState("");
@@ -128,3 +128,5 @@ export function GroupMembers({ group, isOwner }: GroupMembersProps) {
     </Card>
   );
 }
+
+    

@@ -24,7 +24,7 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 export default function GroupDetailsPage() {
   const { id: groupId } = useParams();
   const router = useRouter();
-  const { groups, findUserById, currentUser, isLoading: isAuthLoading, getGroupBalances, deleteGroup, leaveGroup, simplifyGroupDebts, settleAllInGroup } = useSettleSmart();
+  const { groups, findUserById, currentUser, isAuthLoading, getGroupBalances, deleteGroup, leaveGroup, simplifyGroupDebts, settleAllInGroup } = useSettleSmart();
   const { toast } = useToast();
   const [isDeleting, startDeleteTransition] = useTransition();
   const [isLeaving, startLeaveTransition] = useTransition();
@@ -178,8 +178,8 @@ export default function GroupDetailsPage() {
                           </div>
                           <Progress value={groupBalances.progress} className="h-2" />
                           <div className="flex justify-between items-center text-xs pt-1">
-                              <span>Settled: ${groupBalances.settled.toFixed(2)}</span>
-                              <span>Remaining: ${groupBalances.remaining.toFixed(2)}</span>
+                              <span>Settled: {formatCurrency(groupBalances.settled)}</span>
+                              <span>Remaining: {formatCurrency(groupBalances.remaining)}</span>
                           </div>
                       </div>
                       <div className="mt-6 flex gap-2">
@@ -270,3 +270,5 @@ export default function GroupDetailsPage() {
         </div>
   );
 }
+
+    

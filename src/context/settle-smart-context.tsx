@@ -97,10 +97,6 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
             }
         } else {
             setCurrentUser(null);
-            setUsers([]);
-            setGroups([]);
-            setExpenses([]);
-            setGroupChecklists({});
         }
         setIsAuthLoading(false);
     });
@@ -111,61 +107,58 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   }, []);
 
   useEffect(() => {
-    if (!currentUser?.id || !db) {
+    if (isAuthLoading || !db) return;
+
+    let unsubUsers: () => void = () => {};
+    let unsubGroups: () => void = () => {};
+
+    if (currentUser) {
+        // Setup user-dependent listeners
+        unsubUsers = onSnapshot(collection(db, "users"), (snapshot) => {
+            const allUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
+            setUsers(allUsers);
+        });
+
+        const qGroups = query(collection(db, "groups"), where("members", "array-contains", currentUser.id));
+        unsubGroups = onSnapshot(qGroups, (snapshot) => {
+            const userGroups: Group[] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data()} as Group));
+            setGroups(userGroups);
+        });
+
+    } else {
+        // Not logged in, clear all data
+        setUsers([]);
         setGroups([]);
         setExpenses([]);
         setGroupChecklists({});
-        setUsers([]);
-        return;
-    };
-    
-    const currentUserId = currentUser.id;
-
-    const unsubscribeUsers = onSnapshot(collection(db, "users"), (snapshot) => {
-        const allUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
-        setUsers(allUsers);
-    });
-
-    const qGroups = query(collection(db, "groups"), where("members", "array-contains", currentUserId));
-    const unsubscribeGroups = onSnapshot(qGroups, (snapshot) => {
-        const userGroups: Group[] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data()} as Group));
-        setGroups(userGroups);
-    });
+    }
 
     return () => {
-        unsubscribeUsers();
-        unsubscribeGroups();
+        unsubUsers();
+        unsubGroups();
     };
-  }, [currentUser?.id, db]);
+  }, [currentUser, isAuthLoading, db]);
   
     useEffect(() => {
-        if (!db || groups.length === 0) {
+        if (isAuthLoading || !db || groups.length === 0) {
             setExpenses([]);
+            setGroupChecklists({});
             return;
         }
+        
         const groupIds = groups.map(g => g.id);
         if (groupIds.length === 0) {
           setExpenses([]);
+          setGroupChecklists({});
           return;
         }
+
         const qExpenses = query(collection(db, "expenses"), where("groupId", "in", groupIds));
         const unsubscribeExpenses = onSnapshot(qExpenses, (expSnapshot) => {
             const groupExpenses = expSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), date: doc.data().date.toDate().toISOString() } as Expense));
             setExpenses(groupExpenses.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
         });
-        return () => unsubscribeExpenses();
-    }, [db, groups]);
 
-    useEffect(() => {
-        if (!db || groups.length === 0) {
-            setGroupChecklists({});
-            return;
-        }
-        const groupIds = groups.map(g => g.id);
-        if (groupIds.length === 0) {
-            setGroupChecklists({});
-            return;
-        }
         const qChecklists = query(collection(db, "checklists"), where("groupId", "in", groupIds));
         const unsubscribeChecklists = onSnapshot(qChecklists, (checklistSnapshot) => {
             const checklistsData: {[groupId: string]: ChecklistItem[]} = {};
@@ -174,8 +167,12 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
             });
             setGroupChecklists(checklistsData);
         });
-        return () => unsubscribeChecklists();
-    }, [db, groups]);
+
+        return () => {
+            unsubscribeExpenses();
+            unsubscribeChecklists();
+        }
+    }, [db, groups, isAuthLoading]);
 
   const signUp = async (email: string, pass: string) => {
     if (!auth) throw new Error("Auth not initialized");
@@ -474,3 +471,5 @@ export const useSettleSmart = (): SettleSmartContextType => {
   }
   return context;
 };
+
+    
