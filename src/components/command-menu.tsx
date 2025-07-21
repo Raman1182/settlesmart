@@ -146,6 +146,10 @@ export function CommandMenu() {
                 <Users className="mr-2 h-4 w-4" />
                 <span>Create Group</span>
                 </CommandItem>
+                <CommandItem onSelect={() => runCommand(() => router.push('/assistant'))}>
+                  <Sparkles className="mr-2 h-4 w-4" />
+                  <span>AI Assistant</span>
+                </CommandItem>
             </CommandGroup>
             <CommandSeparator />
             <CommandGroup heading="Groups">
