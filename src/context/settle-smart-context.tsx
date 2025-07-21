@@ -2,7 +2,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useMemo, useCallback, useEffect } from "react";
-import type { User, Group, Expense } from "@/lib/types";
+import type { User, Group, Expense, Participant } from "@/lib/types";
 import { users as mockUsers, groups as mockGroups, expenses as mockExpenses } from '@/lib/data';
 
 interface SettleSmartContextType {
@@ -15,7 +15,7 @@ interface SettleSmartContextType {
   balances: {
     totalOwedToUser: number;
     totalOwedByUser: number;
-    settlements: { from: User; to: User; amount: number }[];
+    settlements: { from: User | {id: string, name: string}; to: User | {id: string, name: string}; amount: number }[];
   };
   getGroupBalances: (groupId: string) => { 
       total: number, 
@@ -67,13 +67,10 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
       const memberIds = new Set<string>([currentUser.id]);
       
       memberEmails.forEach(email => {
-        // In a real app, you'd check if these users exist and maybe invite them.
-        // For mock data, we'll find existing users or create dummy placeholders.
         const user = users.find(u => u.email === email);
         if (user) {
           memberIds.add(user.id);
         } else {
-          // You could add logic here to create a new user or handle invites
           console.warn(`User with email ${email} not found.`);
         }
       });
@@ -122,13 +119,13 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
      }));
   }
 
-  const calculateSettlements = useCallback((expensesToCalculate: Expense[], groupMembers: string[]) => {
+  const calculateSettlements = useCallback((expensesToCalculate: Expense[], allParticipants: Participant[]) => {
     const userBalances: { [key: string]: number } = {};
-    groupMembers.forEach(id => userBalances[id] = 0);
+    allParticipants.forEach(p => userBalances[p] = 0);
 
     expensesToCalculate.forEach(expense => {
-        const participants = expense.splitWith.filter(pId => groupMembers.includes(pId));
-        const numParticipants = participants.length;
+        const participantsInThisExpense = expense.splitWith.filter(p => allParticipants.includes(p));
+        const numParticipants = participantsInThisExpense.length;
         if (numParticipants === 0) return;
 
         const share = expense.amount / numParticipants;
@@ -136,13 +133,21 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
         if(!userBalances[expense.paidById]) userBalances[expense.paidById] = 0;
         userBalances[expense.paidById] += expense.amount;
 
-        participants.forEach(participantId => {
+        participantsInThisExpense.forEach(participantId => {
             if(!userBalances[participantId]) userBalances[participantId] = 0;
             userBalances[participantId] -= share;
         });
     });
     return userBalances;
   }, []);
+  
+  const getAllParticipants = useMemo(() => {
+    const all = new Set<Participant>(users.map(u => u.id));
+    expenses.forEach(e => {
+        e.splitWith.forEach(p => all.add(p));
+    });
+    return Array.from(all);
+  }, [users, expenses]);
 
   const getGroupBalances = useCallback((groupId: string) => {
       const group = groups.find(g => g.id === groupId);
@@ -163,10 +168,10 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   }, [groups, expenses, calculateSettlements]);
   
   const balances = useMemo(() => {
-    if (!currentUser || !users.length) {
+    if (!currentUser) {
         return { totalOwedToUser: 0, totalOwedByUser: 0, settlements: [] };
     }
-    const userBalances = calculateSettlements(expenses, users.map(u=>u.id));
+    const userBalances = calculateSettlements(expenses, getAllParticipants);
 
     const settlements: { from: string, to: string, amount: number }[] = [];
     const payers = Object.keys(userBalances).filter(id => userBalances[id] > 0.01);
@@ -193,19 +198,22 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     }
 
     const finalSettlements = settlements
-        .map(debt => ({
-            from: findUserById(debt.from)!,
-            to: findUserById(debt.to)!,
-            amount: debt.amount
-        }))
-        .filter(s => s.from && s.to);
+        .map(debt => {
+            const fromUser = findUserById(debt.from);
+            const toUser = findUserById(debt.to);
+            return {
+                from: fromUser || {id: debt.from, name: debt.from},
+                to: toUser || {id: debt.to, name: debt.to},
+                amount: debt.amount
+            }
+        });
 
     return {
       totalOwedToUser: finalSettlements.filter(s => s.to?.id === currentUser?.id).reduce((sum, s) => sum + s.amount, 0),
       totalOwedByUser: finalSettlements.filter(s => s.from?.id === currentUser?.id).reduce((sum, s) => sum + s.amount, 0),
       settlements: finalSettlements
     };
-  }, [expenses, users, currentUser, findUserById, calculateSettlements]);
+  }, [expenses, currentUser, findUserById, calculateSettlements, getAllParticipants]);
 
 
   const value = {

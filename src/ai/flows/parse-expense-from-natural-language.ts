@@ -21,7 +21,7 @@ const ParseExpenseOutputSchema = z.object({
   amount: z.number().describe('The amount of the expense.'),
   participants: z
     .array(z.string())
-    .describe('The names of all participants involved in the expense.'),
+    .describe('The names of all participants involved in the expense. Every single name must be extracted.'),
   description: z.string().describe('A short description of the expense.'),
 });
 export type ParseExpenseOutput = z.infer<typeof ParseExpenseOutputSchema>;
@@ -44,6 +44,8 @@ const prompt = ai.definePrompt({
   Example: "$50 for pizza with Alex and Ben" -> { amount: 50, participants: ["Alex", "Ben"], description: "Pizza" }
   Example: "I paid 1200 for last night's movie tickets for me, Chloe, and David" -> { amount: 1200, participants: ["you", "Chloe", "David"], description: "Movie tickets" }
   Example: "2000 rupees for dinner with me, Chloe, and Rachel" -> { amount: 2000, participants: ["you", "Chloe", "Rachel"], description: "Dinner" }
+  Example: "150 for coffee between me and XYZ" -> { amount: 150, participants: ["you", "XYZ"], description: "Coffee" }
+
 
   Input: {{{naturalLanguageInput}}}
 

@@ -34,8 +34,9 @@ import { useToast } from "@/components/ui/use-toast";
 import { Checkbox } from "./ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
-import type { User } from "@/lib/types";
+import type { User, Participant } from "@/lib/types";
 import { SheetTrigger } from "./ui/sheet";
+import { Badge } from "./ui/badge";
 
 const expenseFormSchema = z.object({
   description: z.string().min(2, {
@@ -46,7 +47,7 @@ const expenseFormSchema = z.object({
   }),
   paidById: z.string().nonempty({ message: "Please select who paid." }),
   splitWith: z.array(z.string()).min(1, { message: "Select at least one person to split with." }),
-  groupId: z.string().nonempty({ message: "Please select a group." }),
+  groupId: z.string().optional(),
 });
 
 interface AddExpenseSheetProps {
@@ -62,6 +63,8 @@ export function AddExpenseSheet({ children, open, onOpenChange }: AddExpenseShee
   const [isSubmitting, startSubmittingTransition] = useTransition();
   const { addExpense, users, currentUser, groups, findUserById } = useSettleSmart();
   const { toast } = useToast();
+  
+  const [adHocParticipants, setAdHocParticipants] = useState<string[]>([]);
   
   const controlledOpen = open !== undefined ? open : isSheetOpen;
   const setControlledOpen = onOpenChange !== undefined ? onOpenChange : setIsSheetOpen;
@@ -93,42 +96,35 @@ export function AddExpenseSheet({ children, open, onOpenChange }: AddExpenseShee
           form.setValue("amount", result.amount);
           
           const participantNames = result.participants.map(p => p.toLowerCase());
-          const foundParticipantIds = new Set<string>();
-          const notFoundNames = new Set<string>();
+          const finalParticipants: Participant[] = [];
+          const newAdHoc: string[] = [];
 
           participantNames.forEach(name => {
-            const isCurrentUser = (name === 'you' || name === 'me' || name === 'i');
-            const user = isCurrentUser 
-              ? currentUser 
-              : users.find(u => u.name.toLowerCase() === name);
+             const isCurrentUser = ['you', 'me', 'i'].includes(name);
+             const user = isCurrentUser 
+                ? currentUser 
+                : users.find(u => u.name.toLowerCase() === name);
 
             if (user) {
-              foundParticipantIds.add(user.id);
+              if(!finalParticipants.includes(user.id)) finalParticipants.push(user.id);
             } else if (!isCurrentUser) {
-              notFoundNames.add(name);
+              if(!finalParticipants.includes(name)) finalParticipants.push(name);
+              if(!newAdHoc.includes(name)) newAdHoc.push(name);
             }
           });
 
-          // Ensure current user is included if "me" or "I" was parsed as "you"
+          // Ensure current user is always included if mentioned
           if (participantNames.some(p => ['you', 'me', 'i'].includes(p))) {
-            foundParticipantIds.add(currentUser.id);
+            if(!finalParticipants.includes(currentUser.id)) finalParticipants.push(currentUser.id);
           }
           
-          form.setValue("splitWith", Array.from(foundParticipantIds));
+          setAdHocParticipants(newAdHoc);
+          form.setValue("splitWith", finalParticipants);
 
-          if (notFoundNames.size > 0) {
-            const names = Array.from(notFoundNames).join(', ');
-            toast({
-              variant: "destructive",
-              title: "Users Not Found",
-              description: `Could not find: ${names}. Please add them as friends to include them.`,
-            });
-          } else {
-             toast({
-              title: "Success: Expense Auto-filled",
-              description: "We've parsed the details. Please review and select a group before submitting.",
-            });
-          }
+          toast({
+            title: "Success: Expense Auto-filled",
+            description: "We've parsed the details. Please review and submit.",
+          });
         }
       } catch (error) {
         console.error("AI parsing failed:", error);
@@ -145,7 +141,7 @@ export function AddExpenseSheet({ children, open, onOpenChange }: AddExpenseShee
     startSubmittingTransition(async () => {
       try {
         const { category } = await categorizeExpense({ description: values.description });
-        addExpense({ ...values, category: category || 'Other' });
+        addExpense({ ...values, groupId: values.groupId || null, category: category || 'Other' });
         toast({
             title: "Expense Added",
             description: `The expense "${values.description}" has been successfully recorded.`,
@@ -164,23 +160,35 @@ export function AddExpenseSheet({ children, open, onOpenChange }: AddExpenseShee
   };
   
   const selectedGroupId = form.watch("groupId");
-  const splitWithIds = form.watch("splitWith");
+  const splitWith = form.watch("splitWith");
 
-  const membersOfSelectedGroup = useMemo(() => {
-    if (!selectedGroupId) return [];
-    const group = groups.find(g => g.id === selectedGroupId);
-    if (!group) return [];
-    return group.members.map(id => findUserById(id)).filter(Boolean) as User[];
-  }, [groups, selectedGroupId, findUserById]);
-  
   const participantsToDisplay = useMemo(() => {
+    const participantList: (User | { id: string; name: string; isAdHoc: true })[] = [];
+    const addedIds = new Set<string>();
+
+    const addParticipant = (p: User | { id: string; name: string; isAdHoc: true }) => {
+        if (!addedIds.has(p.id)) {
+            participantList.push(p);
+            addedIds.add(p.id);
+        }
+    };
+    
     if (selectedGroupId) {
-      return membersOfSelectedGroup;
+        const group = groups.find(g => g.id === selectedGroupId);
+        group?.members.map(id => findUserById(id)).filter(Boolean).forEach(u => addParticipant(u as User));
+    } else {
+        splitWith.forEach(p => {
+            const user = findUserById(p);
+            if (user) {
+                addParticipant(user);
+            } else {
+                 addParticipant({ id: p, name: p, isAdHoc: true });
+            }
+        });
     }
-    // If no group is selected, show the users that have been selected via AI parsing
-    const aiSelectedUsers = users.filter(u => splitWithIds.includes(u.id));
-    return aiSelectedUsers.length > 0 ? aiSelectedUsers : [];
-  }, [selectedGroupId, membersOfSelectedGroup, splitWithIds, users]);
+    
+    return participantList;
+  }, [selectedGroupId, groups, findUserById, splitWith]);
 
 
   const resetForm = () => {
@@ -192,6 +200,7 @@ export function AddExpenseSheet({ children, open, onOpenChange }: AddExpenseShee
         groupId: "",
       });
       setNlInput("");
+      setAdHocParticipants([]);
   }
 
 
@@ -210,7 +219,7 @@ export function AddExpenseSheet({ children, open, onOpenChange }: AddExpenseShee
         </SheetHeader>
         <div className="p-6 border-y border-border/50 bg-card/50">
             <Textarea
-                placeholder="e.g., $25 for pizza with Alice and Bob for the apartment"
+                placeholder="e.g., $25 for pizza with Alice and Bob"
                 value={nlInput}
                 onChange={(e) => setNlInput(e.target.value)}
                 rows={3}
@@ -265,19 +274,18 @@ export function AddExpenseSheet({ children, open, onOpenChange }: AddExpenseShee
                 name="groupId"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Group</FormLabel>
+                    <FormLabel>Group (Optional)</FormLabel>
                       <Select onValueChange={(value) => {
                           field.onChange(value);
-                          // When group changes, set split to all group members
                           const groupMembers = groups.find(g => g.id === value)?.members || [];
                           form.setValue("splitWith", groupMembers);
-                          // Also reset paidBy if current user is not in the new group
                           if(currentUser && !groupMembers.includes(currentUser.id)){
                              form.setValue("paidById", "");
                           } else if (currentUser) {
                              form.setValue("paidById", currentUser.id);
                           }
-                      }} defaultValue={field.value}>
+                          setAdHocParticipants([]); // Clear ad-hoc when group is selected
+                      }} value={field.value}>
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Select a group..." />
@@ -287,6 +295,7 @@ export function AddExpenseSheet({ children, open, onOpenChange }: AddExpenseShee
                         {groups.map(group => <SelectItem key={group.id} value={group.id}>{group.name}</SelectItem>)}
                       </SelectContent>
                     </Select>
+                    <FormDescription>Selecting a group will pre-fill participants.</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -301,12 +310,12 @@ export function AddExpenseSheet({ children, open, onOpenChange }: AddExpenseShee
                       <FormLabel>Paid by</FormLabel>
                        <Select onValueChange={field.onChange} value={field.value} defaultValue={field.value}>
                         <FormControl>
-                          <SelectTrigger disabled={!selectedGroupId && participantsToDisplay.length === 0}>
+                          <SelectTrigger disabled={participantsToDisplay.length === 0}>
                             <SelectValue placeholder="Select who paid" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {participantsToDisplay.map(user => (
+                          {participantsToDisplay.map(user => 'isAdHoc' in user ? null : (
                             <SelectItem key={user.id} value={user.id}>
                               <div className="flex items-center gap-2">
                                 <Avatar className="h-6 w-6">
@@ -325,7 +334,7 @@ export function AddExpenseSheet({ children, open, onOpenChange }: AddExpenseShee
                 />
               </div>
 
-             {(participantsToDisplay?.length ?? 0) > 0 && (
+             {participantsToDisplay.length > 0 && (
                 <FormField
                     control={form.control}
                     name="splitWith"
@@ -362,11 +371,17 @@ export function AddExpenseSheet({ children, open, onOpenChange }: AddExpenseShee
                                     />
                                     </FormControl>
                                     <FormLabel className="font-normal flex items-center gap-2 cursor-pointer w-full">
-                                         <Avatar className="h-8 w-8">
-                                            <AvatarImage src={item.avatar} alt={item.name} />
-                                            <AvatarFallback>{item.initials}</AvatarFallback>
-                                        </Avatar>
-                                        {item.name}
+                                         {'isAdHoc' in item ? (
+                                             <Badge variant="outline">{item.name}</Badge>
+                                         ) : (
+                                            <>
+                                            <Avatar className="h-8 w-8">
+                                                <AvatarImage src={item.avatar} alt={item.name} />
+                                                <AvatarFallback>{item.initials}</AvatarFallback>
+                                            </Avatar>
+                                            {item.name}
+                                            </>
+                                         )}
                                     </FormLabel>
                                 </FormItem>
                                 )
