@@ -14,6 +14,16 @@ import { useRouter } from "next/navigation";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+} from "@/components/ui/alert-dialog";
+import { TrustScoreIndicator } from "@/components/trust-score-indicator";
 
 
 export default function FriendsPage() {
@@ -26,11 +36,13 @@ export default function FriendsPage() {
     acceptFriendRequest, 
     declineFriendRequest,
     removeFriend,
-    chats
+    chats,
+    calculateUserTrustScore,
   } = useSettleSmart();
   const { toast } = useToast();
   const router = useRouter();
   const [isProcessing, startProcessingTransition] = useTransition();
+  const [selectedFriendForScore, setSelectedFriendForScore] = useState<User | null>(null);
   
   useEffect(() => {
     if (!isAuthLoading && !currentUser) {
@@ -125,6 +137,8 @@ export default function FriendsPage() {
     );
   }
 
+  const friendTrustScore = selectedFriendForScore ? calculateUserTrustScore(selectedFriendForScore.id) : 0;
+
   return (
     <>
       <div className="flex flex-col min-h-screen w-full pb-20">
@@ -172,11 +186,11 @@ export default function FriendsPage() {
                                     </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
-                                    <DropdownMenuItem onClick={() => handleRemoveFriend(friend.id)}>
+                                    <DropdownMenuItem onSelect={() => handleRemoveFriend(friend.id)}>
                                         <UserMinus className="mr-2 h-4 w-4 text-destructive" />
                                         <span className="text-destructive">Unfriend</span>
                                     </DropdownMenuItem>
-                                    <DropdownMenuItem disabled>
+                                    <DropdownMenuItem onSelect={() => setSelectedFriendForScore(friend)}>
                                         <Shield className="mr-2 h-4 w-4" />
                                         <span>Trust Score</span>
                                     </DropdownMenuItem>
@@ -281,6 +295,25 @@ export default function FriendsPage() {
             </Tabs>
         </main>
       </div>
+
+       <AlertDialog open={!!selectedFriendForScore} onOpenChange={(open) => !open && setSelectedFriendForScore(null)}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>{selectedFriendForScore?.name}'s Trust Score</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        This score reflects financial reliability based on their activity in the app. Higher is better!
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <div className="py-4">
+                    <TrustScoreIndicator score={friendTrustScore} />
+                </div>
+                <AlertDialogFooter>
+                    <AlertDialogCancel onClick={() => setSelectedFriendForScore(null)}>Close</AlertDialogCancel>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
     </>
   );
 }
+
+    

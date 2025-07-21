@@ -59,6 +59,7 @@ interface SettleSmartContextType {
   getChatMessages: (friendId: string, callback: (messages: Message[]) => void) => () => void;
   sendMessage: (friendId: string, text: string, type?: 'user' | 'system') => Promise<void>;
   markMessagesAsRead: (chatId: string) => Promise<void>;
+  calculateUserTrustScore: (userId: string) => number;
   signUp: (email: string, pass: string) => Promise<any>;
   signIn: (email: string, pass: string) => Promise<any>;
   signOut: () => Promise<void>;
@@ -85,19 +86,6 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
       return users.find(u => u.id === id);
   }, [users]);
   
-   const chats = useMemo(() => {
-    if (!currentUser) return [];
-    return rawChats.map(chat => {
-      const friendId = chat.participantIds.find((id: string) => id !== currentUser.id);
-      const friend = findUserById(friendId || '');
-      return {
-        ...chat,
-        participants: [currentUser, friend].filter(Boolean) as User[]
-      }
-    })
-  }, [rawChats, currentUser, findUserById]);
-
-
   useEffect(() => {
     const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
     const authInstance = getAuth(app);
@@ -146,6 +134,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     };
   }, []);
 
+  // Listener for all users
   useEffect(() => {
     if (!db) return;
     const unsubUsers = onSnapshot(collection(db, "users"), (snapshot) => {
@@ -155,14 +144,14 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     return () => unsubUsers();
   }, [db]);
 
+  // Listeners that depend on the current user
   useEffect(() => {
     if (isAuthLoading || !db || !currentUser) {
-        if (users.length > 0) setUsers([]);
-        if (groups.length > 0) setGroups([]);
-        if (expenses.length > 0) setExpenses([]);
-        if (friendships.length > 0) setFriendships([]);
-        if (rawChats.length > 0) setRawChats([]);
-        if (Object.keys(groupChecklists).length > 0) setGroupChecklists({});
+        setGroups([]);
+        setExpenses([]);
+        setFriendships([]);
+        setRawChats([]);
+        setGroupChecklists({});
         return;
     }
 
@@ -201,40 +190,53 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     };
   }, [currentUser, isAuthLoading, db]);
   
-    useEffect(() => {
-        if (!db || groups.length === 0) {
-            setExpenses([]);
-            setGroupChecklists({});
-            return;
-        }
-        
-        const groupIds = groups.map(g => g.id);
-        if (groupIds.length === 0) {
-          setExpenses([]);
-          setGroupChecklists({});
-          return;
-        }
+  // Listeners that depend on the user's groups
+  useEffect(() => {
+    if (!db || groups.length === 0) {
+        setExpenses([]);
+        setGroupChecklists({});
+        return;
+    }
+    
+    const groupIds = groups.map(g => g.id);
+    if (groupIds.length === 0) {
+      setExpenses([]);
+      setGroupChecklists({});
+      return;
+    }
 
-        const qExpenses = query(collection(db, "expenses"), where("groupId", "in", groupIds));
-        const unsubscribeExpenses = onSnapshot(qExpenses, (expSnapshot) => {
-            const groupExpenses = expSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), date: doc.data().date.toDate().toISOString() } as Expense));
-            setExpenses(groupExpenses.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+    const qExpenses = query(collection(db, "expenses"), where("groupId", "in", groupIds));
+    const unsubscribeExpenses = onSnapshot(qExpenses, (expSnapshot) => {
+        const groupExpenses = expSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), date: doc.data().date.toDate().toISOString() } as Expense));
+        setExpenses(groupExpenses.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+    });
+
+    const qChecklists = query(collection(db, "checklists"), where("groupId", "in", groupIds));
+    const unsubscribeChecklists = onSnapshot(qChecklists, (checklistSnapshot) => {
+        const checklistsData: {[groupId: string]: ChecklistItem[]} = {};
+        checklistSnapshot.docs.forEach(doc => {
+            checklistsData[doc.id] = doc.data().items;
         });
+        setGroupChecklists(checklistsData);
+    });
 
-        const qChecklists = query(collection(db, "checklists"), where("groupId", "in", groupIds));
-        const unsubscribeChecklists = onSnapshot(qChecklists, (checklistSnapshot) => {
-            const checklistsData: {[groupId: string]: ChecklistItem[]} = {};
-            checklistSnapshot.docs.forEach(doc => {
-                checklistsData[doc.id] = doc.data().items;
-            });
-            setGroupChecklists(checklistsData);
-        });
+    return () => {
+        unsubscribeExpenses();
+        unsubscribeChecklists();
+    }
+  }, [db, groups]);
 
-        return () => {
-            unsubscribeExpenses();
-            unsubscribeChecklists();
-        }
-    }, [db, groups]);
+   const chats = useMemo(() => {
+    if (!currentUser) return [];
+    return rawChats.map(chat => {
+      const friendId = chat.participantIds.find((id: string) => id !== currentUser.id);
+      const friend = findUserById(friendId || '');
+      return {
+        ...chat,
+        participants: [currentUser, friend].filter(Boolean) as User[]
+      }
+    })
+  }, [rawChats, currentUser, findUserById]);
 
   const signUp = async (email: string, pass: string) => {
     if (!auth) throw new Error("Auth not initialized");
@@ -499,9 +501,8 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
       if (!currentUser || !db) return;
       const chatRef = doc(db, "chats", chatId);
       const unreadCountKey = `unreadCount.${currentUser.id}`;
-      await updateDoc(chatRef, {
-          [unreadCountKey]: 0
-      }).catch(err => console.log("Failed to mark as read, maybe chat doc doesn't exist yet"));
+      // Use set with merge to avoid errors if doc doesn't exist yet
+      await setDoc(chatRef, { [unreadCountKey]: 0 }, { merge: true });
   }
 
   const calculateSettlements = useCallback((expensesToCalculate: Expense[], allParticipantIds: string[]) => {
@@ -625,6 +626,22 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     };
   }, [expenses, currentUser, users, getAllParticipantsInExpenses, calculateSettlements, simplifyDebts, findUserById]);
 
+  const calculateUserTrustScore = useCallback((userId: string) => {
+    const allInvolvedUserIds = [...new Set([...users.map(u => u.id), ...getAllParticipantsInExpenses])];
+    const userBalances = calculateSettlements(expenses, allInvolvedUserIds);
+
+    const finalSettlements = simplifyDebts(userBalances);
+
+    const owedToUser = finalSettlements.filter(s => s.to === userId).reduce((sum, s) => sum + s.amount, 0);
+    const userOwes = finalSettlements.filter(s => s.from === userId).reduce((sum, s) => sum + s.amount, 0);
+
+    let score = 70;
+    score += Math.min(20, owedToUser / 50);
+    score -= Math.min(40, userOwes / 25);
+    
+    return Math.max(0, Math.min(100, score));
+  }, [users, expenses, getAllParticipantsInExpenses, calculateSettlements, simplifyDebts]);
+
 
   const value = {
     currentUser,
@@ -654,6 +671,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     getChatMessages,
     sendMessage,
     markMessagesAsRead,
+    calculateUserTrustScore,
     signUp,
     signIn,
     signOut,
@@ -674,3 +692,5 @@ export const useSettleSmart = (): SettleSmartContextType => {
   }
   return context;
 };
+
+    

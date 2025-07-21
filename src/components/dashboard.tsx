@@ -12,7 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { TrustScoreIndicator } from "./trust-score-indicator";
 
 export function Dashboard() {
-  const { currentUser, isAuthLoading, balances } = useSettleSmart();
+  const { currentUser, isAuthLoading, calculateUserTrustScore } = useSettleSmart();
 
   if (isAuthLoading || !currentUser) {
     return (
@@ -22,21 +22,7 @@ export function Dashboard() {
     );
   }
 
-  const getMyTrustScore = () => {
-    const owedToMe = balances.totalOwedToUser;
-    const iOwe = balances.totalOwedByUser;
-    
-    // Start with a base score of 70
-    let score = 70;
-    
-    // For every $50 owed to me, increase score slightly (max increase of 20)
-    score += Math.min(20, owedToMe / 50);
-
-    // For every $25 I owe, decrease score more significantly (max decrease of 40)
-    score -= Math.min(40, iOwe / 25);
-    
-    return Math.max(0, Math.min(100, score));
-  }
+  const myTrustScore = calculateUserTrustScore(currentUser.id);
   
   return (
     <div className="flex flex-col min-h-screen w-full">
@@ -55,7 +41,7 @@ export function Dashboard() {
                   <CardTitle>Your Trust Score</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <TrustScoreIndicator score={getMyTrustScore()} />
+                  <TrustScoreIndicator score={myTrustScore} />
                 </CardContent>
               </Card>
               <BalanceDetails />
@@ -66,3 +52,5 @@ export function Dashboard() {
     </div>
   );
 }
+
+    
