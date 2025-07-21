@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { createContext, useContext, useState, useMemo, useCallback, useEffect } from "react";
@@ -165,7 +166,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
           const allChats = snapshot.docs.map(doc => {
             const data = doc.data();
             const friendId = data.participantIds.find((id: string) => id !== currentUser.id);
-            const friend = findUserById(friendId);
+            const friend = users.find(u => u.id === friendId);
             return {
               id: doc.id,
               ...data,
@@ -194,7 +195,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
         unsubFriendships();
         unsubChats();
     };
-  }, [currentUser, isAuthLoading, db, findUserById]);
+  }, [currentUser, isAuthLoading, db]);
   
     useEffect(() => {
         if (isAuthLoading || !db || groups.length === 0) {
@@ -469,12 +470,14 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     
     const batch = writeBatch(db);
     
-    batch.add(messagesColRef, { ...newMessage, timestamp: serverTimestamp() });
+    const newMessageRef = doc(messagesColRef); // auto-generate ID
+    batch.set(newMessageRef, { ...newMessage, timestamp: serverTimestamp() });
     
     const unreadCountKey = `unreadCount.${friendId}`;
     batch.update(chatRef, {
         lastMessage: {
             ...newMessage,
+            text: type === 'system' ? text : `${currentUser.name}: ${text}`, // Add sender name for user messages
             timestamp: serverTimestamp(),
         },
         [unreadCountKey]: increment(1)
