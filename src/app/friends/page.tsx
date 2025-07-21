@@ -193,6 +193,7 @@ export default function FriendsPage() {
                                             Settle Up
                                         </DropdownMenuItem>
                                     </AlertDialogTrigger>
+                                    {/* TODO: Implement messaging functionality */}
                                     <DropdownMenuItem disabled={!friend.isRegistered}>
                                         <MessageSquare className="mr-2 h-4 w-4" />
                                         Message
