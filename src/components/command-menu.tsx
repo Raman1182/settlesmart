@@ -7,6 +7,7 @@ import {
   Bot,
   CreditCard,
   Home,
+  LineChart,
   Loader2,
   Plus,
   Settings,
@@ -105,9 +106,13 @@ export function CommandMenu() {
               <Users className="mr-2 h-4 w-4" />
               <span>Groups</span>
             </CommandItem>
-            <CommandItem disabled>
+            <CommandItem onSelect={() => runCommand(() => router.push('/friends'))}>
               <User className="mr-2 h-4 w-4" />
               <span>Friends</span>
+            </CommandItem>
+             <CommandItem onSelect={() => runCommand(() => router.push('/insights'))}>
+              <LineChart className="mr-2 h-4 w-4" />
+              <span>Insights</span>
             </CommandItem>
           </CommandGroup>
            <CommandGroup heading="Actions">
