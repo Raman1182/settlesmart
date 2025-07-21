@@ -18,15 +18,15 @@ export function DashboardOverview() {
     const netBalance = balances.totalOwedToUser - balances.totalOwedByUser;
 
     return (
-        <Card>
+        <Card className="col-span-1 lg:col-span-3">
             <CardHeader>
-                <CardTitle>Total Balance</CardTitle>
+                <CardTitle>Financial Snapshot</CardTitle>
                 <CardDescription>
-                    {netBalance >= 0 ? "You're all settled up or owed money." : "You have outstanding balances to settle."}
+                    Your current financial position across all groups.
                 </CardDescription>
             </CardHeader>
             <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4 text-center md:text-left">
-                <div className="flex flex-col gap-1 items-center md:items-start">
+                <div className="flex flex-col gap-1 items-center md:items-start p-4 rounded-lg bg-muted/40">
                     <div className="text-sm font-medium text-muted-foreground flex items-center gap-1">
                         <ArrowDown className="h-4 w-4 text-red-500"/>
                         You Owe
@@ -34,7 +34,7 @@ export function DashboardOverview() {
                     <div className="text-2xl font-bold text-red-500">{formatCurrency(balances.totalOwedByUser)}</div>
                 </div>
 
-                <div className="flex flex-col gap-1 items-center md:items-start">
+                <div className="flex flex-col gap-1 items-center md:items-start p-4 rounded-lg bg-muted/40">
                      <div className="text-sm font-medium text-muted-foreground flex items-center gap-1">
                         <ArrowUp className="h-4 w-4 text-green-500"/>
                         You are Owed
@@ -42,7 +42,7 @@ export function DashboardOverview() {
                     <div className="text-2xl font-bold text-green-500">{formatCurrency(balances.totalOwedToUser)}</div>
                 </div>
 
-                 <div className="flex flex-col gap-1 items-center md:items-start">
+                 <div className="flex flex-col gap-1 items-center md:items-start p-4 rounded-lg bg-muted/40">
                      <div className="text-sm font-medium text-muted-foreground flex items-center gap-1">
                         <Scale className="h-4 w-4"/>
                         Net Balance

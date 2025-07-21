@@ -9,7 +9,7 @@ import { BalanceDetails } from "./balance-details";
 import { SpendingOverTimeChart } from "./spending-over-time-chart";
 import { useSettleSmart } from "@/context/settle-smart-context";
 import { Loader2 } from "lucide-react";
-import { BottomNavbar } from "./bottom-navbar";
+import { GroupsOverview } from "./groups-overview";
 
 export function Dashboard() {
   const { currentUser, isLoading } = useSettleSmart();
@@ -25,20 +25,22 @@ export function Dashboard() {
   return (
     <div className="flex flex-col min-h-screen w-full">
       <Header />
-      <main className="flex flex-1 flex-col gap-4 p-4 sm:p-6 md:gap-8 md:p-8">
-        <DashboardOverview />
-        <div className="grid gap-4 md:gap-8 lg:grid-cols-2 xl:grid-cols-3">
-           <div className="xl:col-span-2 grid auto-rows-max gap-4 md:gap-8">
-               <SpendingOverTimeChart />
+      <main className="flex flex-1 flex-col gap-4 p-4 sm:p-6 md:gap-8 md:p-8 overflow-y-auto">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-8">
+            <DashboardOverview />
+        </div>
+        <div className="grid gap-4 md:gap-8 lg:grid-cols-3">
+           <div className="lg:col-span-2 grid auto-rows-max gap-4 md:gap-8">
                <RecentExpenses />
+               <SpendingOverTimeChart />
           </div>
           <div className="grid auto-rows-max gap-4 md:gap-8">
               <BalanceDetails />
+              <GroupsOverview />
               <SpendingByCategoryChart />
           </div>
         </div>
       </main>
-      <BottomNavbar />
     </div>
   );
 }
