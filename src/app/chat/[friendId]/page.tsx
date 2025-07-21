@@ -105,7 +105,8 @@ function ChatSettleUp({ friendId }: { friendId: string }) {
 
 
 export default function ChatPage() {
-  const { friendId } = useParams();
+  const { friendId: friendIdParam } = useParams();
+  const friendId = friendIdParam as string;
   const router = useRouter();
   const {
     currentUser,
@@ -121,7 +122,7 @@ export default function ChatPage() {
   const [isSending, startSendingTransition] = useTransition();
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   
-  const friend = findUserById(friendId as string);
+  const friend = useMemo(() => findUserById(friendId), [findUserById, friendId]);
 
   useEffect(() => {
     if (!isAuthLoading && !currentUser) {
@@ -134,7 +135,7 @@ export default function ChatPage() {
     const chatId = [currentUser.id, friendId].sort().join('_');
     markMessagesAsRead(chatId);
     
-    const unsubscribe = getChatMessages(friendId as string, (newMessages) => {
+    const unsubscribe = getChatMessages(friendId, (newMessages) => {
         setMessages(newMessages);
     });
 
@@ -158,7 +159,7 @@ export default function ChatPage() {
 
     startSendingTransition(async () => {
       try {
-        await sendMessage(friendId as string, input, 'user');
+        await sendMessage(friendId, input, 'user');
         setInput("");
       } catch (error) {
         console.error("Failed to send message", error);

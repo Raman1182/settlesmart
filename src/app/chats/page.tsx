@@ -22,7 +22,8 @@ export default function ChatsPage() {
     }, [isAuthLoading, currentUser, router]);
 
     const sortedChats = useMemo(() => {
-        return chats.sort((a, b) => {
+        if (!chats) return [];
+        return [...chats].sort((a, b) => {
             if (!a.lastMessage?.timestamp) return 1;
             if (!b.lastMessage?.timestamp) return -1;
             return new Date(b.lastMessage.timestamp).getTime() - new Date(a.lastMessage.timestamp).getTime();
@@ -49,7 +50,7 @@ export default function ChatsPage() {
                     <CardContent>
                         <div className="space-y-2">
                             {sortedChats.map(chat => {
-                                const friend = chat.participants.find(p => p.id !== currentUser.id);
+                                const friend = chat.participants?.find(p => p.id !== currentUser.id);
                                 const unreadCount = chat.unreadCount?.[currentUser.id] || 0;
                                 if (!friend) return null;
 

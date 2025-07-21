@@ -75,7 +75,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const [groups, setGroups] = useState<Group[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [friendships, setFriendships] = useState<Friendship[]>([]);
-  const [chats, setChats] = useState<Chat[]>([]);
+  const [rawChats, setRawChats] = useState<Omit<Chat, 'participants'>[]>([]);
   const [groupChecklists, setGroupChecklists] = useState<{ [groupId: string]: ChecklistItem[] }>({});
 
   const [auth, setAuth] = useState<Auth | null>(null);
@@ -84,6 +84,19 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const findUserById = useCallback((id: string): User | undefined => {
       return users.find(u => u.id === id);
   }, [users]);
+  
+   const chats = useMemo(() => {
+    if (!currentUser) return [];
+    return rawChats.map(chat => {
+      const friendId = chat.participantIds.find((id: string) => id !== currentUser.id);
+      const friend = findUserById(friendId || '');
+      return {
+        ...chat,
+        participants: [currentUser, friend].filter(Boolean) as User[]
+      }
+    })
+  }, [rawChats, currentUser, findUserById]);
+
 
   useEffect(() => {
     const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
@@ -134,20 +147,24 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   }, []);
 
   useEffect(() => {
+    if (!db) return;
+    const unsubUsers = onSnapshot(collection(db, "users"), (snapshot) => {
+        const allUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
+        setUsers(allUsers);
+    });
+    return () => unsubUsers();
+  }, [db]);
+
+  useEffect(() => {
     if (isAuthLoading || !db || !currentUser) {
         if (users.length > 0) setUsers([]);
         if (groups.length > 0) setGroups([]);
         if (expenses.length > 0) setExpenses([]);
         if (friendships.length > 0) setFriendships([]);
-        if (chats.length > 0) setChats([]);
+        if (rawChats.length > 0) setRawChats([]);
         if (Object.keys(groupChecklists).length > 0) setGroupChecklists({});
         return;
     }
-
-    const unsubUsers = onSnapshot(collection(db, "users"), (snapshot) => {
-        const allUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
-        setUsers(allUsers);
-    });
 
     const qGroups = query(collection(db, "groups"), where("members", "array-contains", currentUser.id));
     const unsubGroups = onSnapshot(qGroups, (snapshot) => {
@@ -160,23 +177,11 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
         const userFriendships = snapshot.docs.map(doc => ({id: doc.id, ...doc.data() } as Friendship));
         setFriendships(userFriendships);
     });
-
-    return () => {
-        unsubUsers();
-        unsubGroups();
-        unsubFriendships();
-    };
-  }, [currentUser, isAuthLoading, db]);
-
-  useEffect(() => {
-    if (!currentUser || !db || users.length === 0) return;
     
     const qChats = query(collection(db, 'chats'), where('participantIds', 'array-contains', currentUser.id));
     const unsubChats = onSnapshot(qChats, (snapshot) => {
       const allChats = snapshot.docs.map(doc => {
         const data = doc.data();
-        const friendId = data.participantIds.find((id: string) => id !== currentUser.id);
-        const friend = users.find(u => u.id === friendId);
         return {
           id: doc.id,
           ...data,
@@ -184,18 +189,20 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
               ...data.lastMessage,
               timestamp: data.lastMessage.timestamp?.toDate().toISOString()
           } : null,
-          participants: [currentUser, friend].filter(Boolean)
-        } as Chat;
+        } as Omit<Chat, 'participants'>;
       });
-      setChats(allChats);
+      setRawChats(allChats);
     });
-    
-    return () => unsubChats();
 
-  }, [currentUser, db, users])
+    return () => {
+        unsubGroups();
+        unsubFriendships();
+        unsubChats();
+    };
+  }, [currentUser, isAuthLoading, db]);
   
     useEffect(() => {
-        if (isAuthLoading || !db || groups.length === 0) {
+        if (!db || groups.length === 0) {
             setExpenses([]);
             setGroupChecklists({});
             return;
@@ -227,7 +234,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
             unsubscribeExpenses();
             unsubscribeChecklists();
         }
-    }, [db, groups, isAuthLoading]);
+    }, [db, groups]);
 
   const signUp = async (email: string, pass: string) => {
     if (!auth) throw new Error("Auth not initialized");
@@ -475,7 +482,8 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     const chatUpdatePayload = {
         lastMessage: {
             ...newMessage,
-            text: type === 'system' ? text : `${currentUser.name}: ${text}`,
+            text: type === 'system' ? text : text,
+            senderId: currentUser.id,
             timestamp: serverTimestamp(),
         },
         [unreadCountKey]: increment(1)
