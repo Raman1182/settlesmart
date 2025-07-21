@@ -22,7 +22,7 @@ interface AddExpenseData {
 
 interface SettleSmartContextType {
   currentUser: User | null;
-  isLoading: boolean;
+  isAuthLoading: boolean;
   users: User[];
   groups: Group[];
   expenses: Expense[];
@@ -67,7 +67,7 @@ const SettleSmartContext = createContext<SettleSmartContextType | undefined>(und
 
 export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
   
   const [users, setUsers] = useState<User[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
@@ -79,7 +79,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
-        setIsLoading(true);
+        setIsAuthLoading(true);
         if (user) {
             const userRef = doc(db, "users", user.uid);
             const userSnap = await getDoc(userRef);
@@ -101,7 +101,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
         } else {
             setCurrentUser(null);
         }
-        setIsLoading(false);
+        setIsAuthLoading(false);
     });
 
     return () => {
@@ -570,7 +570,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
   const value = {
     currentUser,
-    isLoading,
+    isAuthLoading: isAuthLoading,
     users,
     groups,
     expenses,

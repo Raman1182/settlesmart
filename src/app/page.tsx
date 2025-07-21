@@ -8,16 +8,16 @@ import { Dashboard } from "@/components/dashboard";
 import { Loader2 } from "lucide-react";
 
 export default function Home() {
-  const { currentUser, isLoading } = useSettleSmart();
+  const { currentUser, isAuthLoading } = useSettleSmart();
   const router = useRouter();
 
   useEffect(() => {
-    if (!isLoading && !currentUser) {
+    if (!isAuthLoading && !currentUser) {
       router.replace("/login");
     }
-  }, [isLoading, currentUser, router]);
+  }, [isAuthLoading, currentUser, router]);
 
-  if (isLoading || !currentUser) {
+  if (isAuthLoading || !currentUser) {
     return (
        <div className="flex items-center justify-center min-h-screen bg-background">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />

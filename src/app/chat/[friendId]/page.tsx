@@ -16,7 +16,7 @@ import { format } from 'date-fns';
 
 export default function ChatPage() {
   const { friendId } = useParams() as { friendId: string };
-  const { currentUser, findUserById, getChatMessages, sendMessage, isLoading, friendships } = useSettleSmart();
+  const { currentUser, findUserById, getChatMessages, sendMessage, isAuthLoading, friendships } = useSettleSmart();
   const router = useRouter();
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
@@ -34,12 +34,12 @@ export default function ChatPage() {
   const isFriend = friendships.some(f => f.status === 'accepted' && f.userIds.includes(friendId));
 
   useEffect(() => {
-    if (isLoading || !currentUser) return;
+    if (isAuthLoading || !currentUser) return;
     if (!friendId) {
         router.replace('/friends');
         return;
     }
-    if(!friend && !isLoading) {
+    if(!friend && !isAuthLoading) {
         // Friend not found after loading, maybe redirect
     }
 
@@ -48,13 +48,13 @@ export default function ChatPage() {
     return () => {
         if(unsubscribe) unsubscribe();
     };
-  }, [friendId, currentUser, isLoading, router, getChatMessages, friend]);
+  }, [friendId, currentUser, isAuthLoading, router, getChatMessages, friend]);
 
   useEffect(() => {
-    if (!isLoading && friendId && !isFriend) {
+    if (!isAuthLoading && friendId && !isFriend) {
         router.replace('/friends');
     }
-  }, [isLoading, friendId, isFriend, router]);
+  }, [isAuthLoading, friendId, isFriend, router]);
 
   useEffect(() => {
     // Scroll to bottom when new messages arrive
@@ -82,7 +82,7 @@ export default function ChatPage() {
     }
   };
 
-  if (isLoading || !currentUser) {
+  if (isAuthLoading || !currentUser) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />

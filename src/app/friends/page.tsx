@@ -32,7 +32,7 @@ interface FriendWithBalance {
 
 
 export default function FriendsPage() {
-  const { users, currentUser, balances, settleFriendDebt, isLoading, friendships, sendFriendRequest, acceptFriendRequest, rejectFriendRequest, findUserById } = useSettleSmart();
+  const { users, currentUser, balances, settleFriendDebt, isAuthLoading, friendships, sendFriendRequest, acceptFriendRequest, rejectFriendRequest, findUserById } = useSettleSmart();
   const { toast } = useToast();
   const [settleFriend, setSettleFriend] = useState<FriendWithBalance | null>(null);
   const [isSettling, startSettleTransition] = useTransition();
@@ -41,10 +41,10 @@ export default function FriendsPage() {
   const router = useRouter();
   
   useEffect(() => {
-    if (!isLoading && !currentUser) {
+    if (!isAuthLoading && !currentUser) {
       router.replace("/login");
     }
-  }, [isLoading, currentUser, router]);
+  }, [isAuthLoading, currentUser, router]);
 
   const friendsWithBalances = useMemo(() => {
     if (!currentUser) return [];
@@ -145,7 +145,7 @@ export default function FriendsPage() {
     }
   };
   
-  if (isLoading || !currentUser) {
+  if (isAuthLoading || !currentUser) {
     return (
        <div className="flex items-center justify-center min-h-screen bg-background">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />

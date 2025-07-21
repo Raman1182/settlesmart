@@ -15,9 +15,9 @@ import { BudgetGoals } from "@/components/budget-goals";
 
 
 export default function InsightsPage() {
-    const { currentUser, isLoading } = useSettleSmart();
+    const { currentUser, isAuthLoading } = useSettleSmart();
 
-    if (isLoading || !currentUser) {
+    if (isAuthLoading || !currentUser) {
         return (
           <div className="flex items-center justify-center min-h-screen bg-background">
             <Loader2 className="h-12 w-12 animate-spin text-primary" />

@@ -12,9 +12,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { TrustScoreIndicator } from "./trust-score-indicator";
 
 export function Dashboard() {
-  const { currentUser, isLoading, balances } = useSettleSmart();
+  const { currentUser, isAuthLoading, balances } = useSettleSmart();
 
-  if (isLoading || !currentUser) {
+  if (isAuthLoading || !currentUser) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
