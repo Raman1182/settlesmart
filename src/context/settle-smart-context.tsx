@@ -70,14 +70,11 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const [db, setDb] = useState<Firestore | null>(null);
 
   useEffect(() => {
-    console.log("SettleSmartProvider mounted.");
     const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
     const authInstance = getAuth(app);
     const dbInstance = getFirestore(app);
-    console.log("Firebase services initialized.");
 
     enableIndexedDbPersistence(dbInstance)
-      .then(() => console.log("Firestore persistence enabled."))
       .catch((err) => {
         if (err.code == 'failed-precondition') {
             console.warn("Firestore persistence failed: multiple tabs open.");
@@ -90,7 +87,6 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     setDb(dbInstance);
 
     const unsubscribeAuth = onAuthStateChanged(authInstance, async (user) => {
-        console.log("onAuthStateChanged triggered. User:", user?.uid || "null");
         if (user) {
             const userRef = doc(dbInstance, "users", user.uid);
             try {
@@ -98,7 +94,6 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
               if (userSnap.exists()) {
                   const userData = { id: user.uid, ...userSnap.data() } as User;
                   setCurrentUser(userData);
-                  console.log("User authenticated and data fetched:", userData.email);
               } else {
                   const name = user.email!.split('@')[0] || 'New User';
                   const initials = name.charAt(0).toUpperCase();
@@ -111,20 +106,17 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
                   };
                   await setDoc(userRef, { email: newUserRecord.email, name: newUserRecord.name, avatar: newUserRecord.avatar, initials: initials });
                   setCurrentUser(newUserRecord);
-                  console.log("New user created and authenticated:", newUserRecord.email);
               }
             } catch(error) {
                console.error("Error fetching user document in onAuthStateChanged:", error);
             }
         } else {
             setCurrentUser(null);
-            console.log("User logged out.");
         }
         setIsAuthLoading(false);
     });
 
     return () => {
-        console.log("Cleaning up auth listener.");
         unsubscribeAuth();
     };
   }, []);
@@ -138,7 +130,6 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     let unsubGroups: () => void = () => {};
 
     if (currentUser) {
-        console.log(`Attaching Firestore listeners for user: ${currentUser.id}`);
         unsubUsers = onSnapshot(collection(db, "users"), (snapshot) => {
             const allUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
             setUsers(allUsers);
@@ -155,7 +146,6 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
         });
 
     } else {
-        console.log("No current user, skipping Firestore listeners.");
         setUsers([]);
         setGroups([]);
         setExpenses([]);
@@ -163,7 +153,6 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     }
 
     return () => {
-        console.log("Cleaning up user and group listeners.");
         unsubUsers();
         unsubGroups();
     };
@@ -171,7 +160,6 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   
     useEffect(() => {
         if (isAuthLoading || !db || groups.length === 0) {
-            console.log("Skipping expense/checklist listeners: auth loading, no db, or no groups.");
             setExpenses([]);
             setGroupChecklists({});
             return;
@@ -179,13 +167,11 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
         
         const groupIds = groups.map(g => g.id);
         if (groupIds.length === 0) {
-          console.log("No groups for current user, skipping expense/checklist listeners.");
           setExpenses([]);
           setGroupChecklists({});
           return;
         }
 
-        console.log(`Attaching listeners for expenses and checklists in ${groupIds.length} groups.`);
         const qExpenses = query(collection(db, "expenses"), where("groupId", "in", groupIds));
         const unsubscribeExpenses = onSnapshot(qExpenses, (expSnapshot) => {
             const groupExpenses = expSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), date: doc.data().date.toDate().toISOString() } as Expense));
@@ -206,7 +192,6 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
         });
 
         return () => {
-            console.log("Cleaning up expense and checklist listeners.");
             unsubscribeExpenses();
             unsubscribeChecklists();
         }

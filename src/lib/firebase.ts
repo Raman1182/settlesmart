@@ -4,7 +4,7 @@ import { initializeApp, getApp, getApps } from "firebase/app";
 import { getFirestore, setLogLevel } from "firebase/firestore";
 
 // Enable debug logging
-setLogLevel('debug');
+// setLogLevel('debug');
 
 export const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
