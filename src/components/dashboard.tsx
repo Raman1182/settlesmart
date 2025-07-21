@@ -29,10 +29,10 @@ export function Dashboard() {
     // Start with a base score of 70
     let score = 70;
     
-    // For every $100 owed to me, increase score slightly (max increase of 20)
+    // For every $50 owed to me, increase score slightly (max increase of 20)
     score += Math.min(20, owedToMe / 50);
 
-    // For every $100 I owe, decrease score more significantly (max decrease of 40)
+    // For every $25 I owe, decrease score more significantly (max decrease of 40)
     score -= Math.min(40, iOwe / 25);
     
     return Math.max(0, Math.min(100, score));
