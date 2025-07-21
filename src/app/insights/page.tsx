@@ -4,13 +4,8 @@
 import { Header } from "@/components/header";
 import { SpendingByCategoryChart } from "@/components/spending-by-category-chart";
 import { SpendingOverTimeChart } from "@/components/spending-over-time-chart";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Progress } from "@/components/ui/progress";
 import { useSettleSmart } from "@/context/settle-smart-context";
-import { formatCurrency } from "@/lib/utils";
-import { Loader2, Users, ShoppingCart, Target } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { BudgetGoals } from "@/components/budget-goals";
 
 
@@ -28,7 +23,7 @@ export default function InsightsPage() {
     return (
         <div className="flex flex-col min-h-screen w-full">
             <Header pageTitle="Insights" />
-            <main className="flex flex-1 flex-col gap-4 p-4 sm:p-6 md:gap-8 md:p-8 overflow-y-auto">
+            <main className="flex flex-1 flex-col gap-4 p-4 sm:p-6 md:gap-8 md:p-8 overflow-y-auto pb-24">
                  <div className="grid gap-4 md:gap-8 lg:grid-cols-2">
                     <SpendingByCategoryChart />
                     <BudgetGoals />

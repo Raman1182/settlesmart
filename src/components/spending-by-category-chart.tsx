@@ -67,7 +67,7 @@ const renderActiveShape = (props: any) => {
 
 
 export function SpendingByCategoryChart() {
-    const { expenses } = useSettleSmart();
+    const { expenses, currentUser } = useSettleSmart();
     const [activeIndex, setActiveIndex] = React.useState(0);
 
     const onPieEnter = React.useCallback(
@@ -77,14 +77,30 @@ export function SpendingByCategoryChart() {
         [setActiveIndex]
     );
 
-    const spendingByCategory = expenses.reduce((acc, expense) => {
-        const category = expense.category || 'Other';
-        if (!acc[category]) {
-            acc[category] = 0;
-        }
-        acc[category] += expense.amount;
-        return acc;
-    }, {} as Record<string, number>);
+    const spendingByCategory = React.useMemo(() => {
+        if (!currentUser) return {};
+
+        return expenses.reduce((acc, expense) => {
+            const isParticipant = expense.splitWith.includes(currentUser.id);
+            if (!isParticipant) return acc;
+
+            const category = expense.category || 'Other';
+            if (!acc[category]) {
+                acc[category] = 0;
+            }
+
+            if (expense.splitType === 'equally') {
+                acc[category] += expense.amount / expense.splitWith.length;
+            } else {
+                const userSplit = expense.unequalSplits?.find(s => s.participantId === currentUser.id);
+                acc[category] += userSplit?.amount || 0;
+            }
+            
+            return acc;
+        }, {} as Record<string, number>);
+
+    }, [expenses, currentUser]);
+
 
     const chartData = Object.entries(spendingByCategory).map(([category, amount], index) => ({
         category,
@@ -103,14 +119,14 @@ export function SpendingByCategoryChart() {
     return (
         <Card className="flex flex-col h-full">
             <CardHeader>
-                <CardTitle>Spending by Category</CardTitle>
-                <CardDescription>Hover over a segment to see details.</CardDescription>
+                <CardTitle>Your Spending by Category</CardTitle>
+                <CardDescription>A breakdown of your personal share of expenses.</CardDescription>
             </CardHeader>
             <CardContent className="flex-1 pb-0 flex items-center justify-center">
                 {chartData.length > 0 ? (
                     <ChartContainer
                         config={chartConfig}
-                        className="mx-auto aspect-square max-h-[300px]"
+                        className="mx-auto aspect-square max-h-[350px]"
                     >
                         <PieChart>
                             <ChartTooltip
@@ -123,8 +139,8 @@ export function SpendingByCategoryChart() {
                                 data={chartData}
                                 cx="50%"
                                 cy="50%"
-                                innerRadius={60}
-                                outerRadius={80}
+                                innerRadius={80}
+                                outerRadius={110}
                                 dataKey="amount"
                                 onMouseEnter={onPieEnter}
                             />
