@@ -42,7 +42,7 @@ export default function LoginPage() {
         title: "Login Successful",
         description: "Welcome back! Redirecting...",
       });
-      // The useEffect will handle redirection.
+      // The useEffect will handle redirection once currentUser is updated.
     } catch (error: any) {
       toast({
         variant: "destructive",

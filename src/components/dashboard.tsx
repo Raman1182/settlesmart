@@ -19,13 +19,11 @@ export function Dashboard() {
   const router = useRouter();
 
   useEffect(() => {
-    // Only redirect if loading is finished and there's no user.
     if (!isLoading && !currentUser) {
       router.push('/login');
     }
   }, [currentUser, isLoading, router]);
 
-  // Show a loading spinner while the auth state is being determined.
   if (isLoading || !currentUser) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">
@@ -34,7 +32,6 @@ export function Dashboard() {
     );
   }
   
-  // Render the dashboard only when loading is complete and the user exists.
   return (
     <div className="grid min-h-screen w-full md:grid-cols-[240px_1fr] lg:grid-cols-[280px_1fr]">
       <AppSidebar />

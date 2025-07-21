@@ -93,6 +93,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
               return [...prevUsers, userData];
             });
           } else {
+             // This case might happen if user record is deleted but auth record remains
             setCurrentUser(null);
           }
           setIsLoading(false);
@@ -138,6 +139,8 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
         } else {
             setExpenses([]);
         }
+      }, (error) => {
+          console.error("Error listening to groups collection:", error);
       });
 
       return () => unsubscribe();
@@ -153,7 +156,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     const newExpenseRef = doc(collection(db, "expenses"));
     await setDoc(newExpenseRef, {
         ...expenseData,
-        date: new Date(),
+        date: serverTimestamp(),
         createdBy: currentUser.id,
     });
   };
@@ -172,6 +175,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   };
 
   const login = async (email: string, password: string) => {
+    setIsLoading(true);
     await signInWithEmailAndPassword(auth, email, password);
   };
 
@@ -239,7 +243,6 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
       await batch.commit();
       
-      // After updating members, fetch their user data if we don't have it
       if (membersToAddIds.length > 0) {
         fetchUsers(membersToAddIds);
       }
@@ -305,8 +308,8 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
         .filter(s => s.from && s.to);
 
     return {
-      totalOwedToUser: finalSettlements.filter(s => s.to?.id === currentUser.id).reduce((sum, s) => sum + s.amount, 0),
-      totalOwedByUser: finalSettlements.filter(s => s.from?.id === currentUser.id).reduce((sum, s) => sum + s.amount, 0),
+      totalOwedToUser: finalSettlements.filter(s => s.to?.id === currentUser?.id).reduce((sum, s) => sum + s.amount, 0),
+      totalOwedByUser: finalSettlements.filter(s => s.from?.id === currentUser?.id).reduce((sum, s) => sum + s.amount, 0),
       settlements: finalSettlements
     };
   }, [expenses, users, currentUser, findUserById]);
