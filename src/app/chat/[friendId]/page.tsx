@@ -48,7 +48,7 @@ export default function ChatPage() {
     return () => {
         if(unsubscribe) unsubscribe();
     };
-  }, [friendId, currentUser, isLoading, router, getChatMessages]);
+  }, [friendId, currentUser, isLoading, router, getChatMessages, friend]);
 
   useEffect(() => {
     if (!isLoading && friendId && !isFriend) {
@@ -163,5 +163,3 @@ export default function ChatPage() {
     </div>
   );
 }
-
-    

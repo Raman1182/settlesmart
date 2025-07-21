@@ -127,30 +127,32 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
         const userGroups: Group[] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data()} as Group));
         setGroups(userGroups);
 
-        if (userGroups.length > 0) {
-            const groupIds = userGroups.map(g => g.id);
-            const qExpenses = query(collection(db, "expenses"), where("groupId", "in", groupIds));
-            const unsubscribeExpenses = onSnapshot(qExpenses, (expSnapshot) => {
-                const groupExpenses = expSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), date: doc.data().date.toDate().toISOString() } as Expense));
-                setExpenses(groupExpenses.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
-            });
+        const groupIds = userGroups.map(g => g.id);
 
-            const qChecklists = query(collection(db, "checklists"), where("groupId", "in", groupIds));
-            const unsubscribeChecklists = onSnapshot(qChecklists, (checklistSnapshot) => {
-                const checklistsData: {[groupId: string]: ChecklistItem[]} = {};
-                checklistSnapshot.docs.forEach(doc => {
-                    checklistsData[doc.id] = doc.data().items;
-                });
-                setGroupChecklists(checklistsData);
-            });
-
-            return () => {
-                unsubscribeExpenses();
-                unsubscribeChecklists();
-            }
-        } else {
+        if (groupIds.length === 0) {
             setExpenses([]);
             setGroupChecklists({});
+            return;
+        }
+
+        const qExpenses = query(collection(db, "expenses"), where("groupId", "in", groupIds));
+        const unsubscribeExpenses = onSnapshot(qExpenses, (expSnapshot) => {
+            const groupExpenses = expSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), date: doc.data().date.toDate().toISOString() } as Expense));
+            setExpenses(groupExpenses.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+        });
+
+        const qChecklists = query(collection(db, "checklists"), where("groupId", "in", groupIds));
+        const unsubscribeChecklists = onSnapshot(qChecklists, (checklistSnapshot) => {
+            const checklistsData: {[groupId: string]: ChecklistItem[]} = {};
+            checklistSnapshot.docs.forEach(doc => {
+                checklistsData[doc.id] = doc.data().items;
+            });
+            setGroupChecklists(checklistsData);
+        });
+
+        return () => {
+            unsubscribeExpenses();
+            unsubscribeChecklists();
         }
     });
 
@@ -169,9 +171,9 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     });
     
     return () => {
-        if (unsubscribeGroups) unsubscribeGroups();
-        if (unsubscribeFriendships) unsubscribeFriendships();
-        if (unsubscribeUsers) unsubscribeUsers();
+        unsubscribeGroups();
+        unsubscribeFriendships();
+        unsubscribeUsers();
     };
   }, [currentUser?.id]);
   
@@ -191,13 +193,13 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   useEffect(() => {
       if (!currentUser?.id) {
           setMessages([]);
-          return () => {};
+          return;
       }
       const chatIds = JSON.parse(chatIdsString);
 
       if (chatIds.length === 0) {
           setMessages([]);
-          return () => {};
+          return;
       }
       
       const qMessages = query(collection(db, "messages"), where("chatId", "in", chatIds), orderBy("createdAt"));
@@ -604,5 +606,3 @@ export const useSettleSmart = (): SettleSmartContextType => {
   }
   return context;
 };
-
-    
