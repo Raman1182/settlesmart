@@ -78,8 +78,8 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
 
   useEffect(() => {
+    setIsAuthLoading(true);
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
-        setIsAuthLoading(true);
         if (user) {
             const userRef = doc(db, "users", user.uid);
             const userSnap = await getDoc(userRef);
