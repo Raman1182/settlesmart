@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useEffect, useRef, useTransition, useMemo } from "react";
@@ -39,9 +40,9 @@ function ChatSettleUp({ friendId }: { friendId: string }) {
         });
 
         relatedExpenses.forEach(e => {
-            const amountPerPerson = e.amount / 2;
+            const amountPerPerson = e.amount / e.splitWith.length;
             if (e.paidById === currentUser.id) {
-                balance += amountPerPerson;
+                balance += amountPerPerson * (e.splitWith.length - 1);
             } else {
                 balance -= amountPerPerson;
             }
@@ -71,7 +72,7 @@ function ChatSettleUp({ friendId }: { friendId: string }) {
                     <p className="font-bold">
                         {isSettled && "You are all settled up!"}
                         {friendOwes && `${friend.name} owes you ${formatCurrency(netBalance)}`}
-                        {userOwes && `You owe ${friend.name} ${formatCurrency(Math.abs(userOwes))}`}
+                        {userOwes && `You owe ${friend.name} ${formatCurrency(Math.abs(netBalance))}`}
                     </p>
                     <p className="text-xs text-muted-foreground">Across all your 1-on-1 expenses.</p>
                 </div>

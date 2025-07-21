@@ -135,7 +135,6 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
   useEffect(() => {
     if (isAuthLoading || !db || !currentUser) {
-        // Clear data when logging out or loading
         if (users.length > 0) setUsers([]);
         if (groups.length > 0) setGroups([]);
         if (expenses.length > 0) setExpenses([]);
@@ -145,34 +144,39 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
         return;
     }
 
-    let unsubUsers: () => void = () => {};
-    let unsubGroups: () => void = () => {};
-    let unsubFriendships: () => void = () => {};
-    let unsubChats: () => void = () => {};
-    
-    unsubUsers = onSnapshot(collection(db, "users"), (snapshot) => {
+    const unsubUsers = onSnapshot(collection(db, "users"), (snapshot) => {
         const allUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
         setUsers(allUsers);
     });
 
     const qGroups = query(collection(db, "groups"), where("members", "array-contains", currentUser.id));
-    unsubGroups = onSnapshot(qGroups, (snapshot) => {
+    const unsubGroups = onSnapshot(qGroups, (snapshot) => {
         const userGroups: Group[] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data()} as Group));
         setGroups(userGroups);
     });
     
     const qFriendships = query(collection(db, "friendships"), where("participantIds", "array-contains", currentUser.id));
-    unsubFriendships = onSnapshot(qFriendships, (snapshot) => {
+    const unsubFriendships = onSnapshot(qFriendships, (snapshot) => {
         const userFriendships = snapshot.docs.map(doc => ({id: doc.id, ...doc.data() } as Friendship));
         setFriendships(userFriendships);
     });
 
+    return () => {
+        unsubUsers();
+        unsubGroups();
+        unsubFriendships();
+    };
+  }, [currentUser, isAuthLoading, db]);
+
+  useEffect(() => {
+    if (!currentUser || !db || users.length === 0) return;
+    
     const qChats = query(collection(db, 'chats'), where('participantIds', 'array-contains', currentUser.id));
-    unsubChats = onSnapshot(qChats, (snapshot) => {
+    const unsubChats = onSnapshot(qChats, (snapshot) => {
       const allChats = snapshot.docs.map(doc => {
         const data = doc.data();
         const friendId = data.participantIds.find((id: string) => id !== currentUser.id);
-        const friend = findUserById(friendId);
+        const friend = users.find(u => u.id === friendId);
         return {
           id: doc.id,
           ...data,
@@ -185,15 +189,10 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
       });
       setChats(allChats);
     });
+    
+    return () => unsubChats();
 
-
-    return () => {
-        unsubUsers();
-        unsubGroups();
-        unsubFriendships();
-        unsubChats();
-    };
-  }, [currentUser, isAuthLoading, db, findUserById]);
+  }, [currentUser, db, users])
   
     useEffect(() => {
         if (isAuthLoading || !db || groups.length === 0) {
@@ -494,7 +493,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
       const unreadCountKey = `unreadCount.${currentUser.id}`;
       await updateDoc(chatRef, {
           [unreadCountKey]: 0
-      });
+      }).catch(err => console.log("Failed to mark as read, maybe chat doc doesn't exist yet"));
   }
 
   const calculateSettlements = useCallback((expensesToCalculate: Expense[], allParticipantIds: string[]) => {
