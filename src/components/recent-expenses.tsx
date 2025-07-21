@@ -22,7 +22,7 @@ import { format, formatDistanceToNow } from "date-fns";
 import { formatCurrency } from "@/lib/utils";
 
 export function RecentExpenses() {
-    const { expenses, findUserById, groups } = useSettleSmart();
+    const { expenses, findUserById, groups, currentUser } = useSettleSmart();
 
     const getGroupName = (groupId: string) => groups.find(g => g.id === groupId)?.name || 'N/A';
 
@@ -63,7 +63,7 @@ export function RecentExpenses() {
                                             <div className="grid gap-0.5">
                                                     <div className="font-medium">{expense.description}</div>
                                                 <div className="text-sm text-muted-foreground">
-                                                    Paid by {paidByUser?.id === useSettleSmart().currentUser?.id ? 'you' : paidByUser?.name} in <span className="font-medium text-foreground">{getGroupName(expense.groupId)}</span>
+                                                    Paid by {paidByUser?.id === currentUser?.id ? 'you' : paidByUser?.name} in <span className="font-medium text-foreground">{getGroupName(expense.groupId)}</span>
                                                 </div>
                                             </div>
                                         </div>
