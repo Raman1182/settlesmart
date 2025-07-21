@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -25,7 +25,14 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
   const { toast } = useToast();
-  const { login } = useSettleSmart();
+  const { login, currentUser, isLoading: isAuthLoading } = useSettleSmart();
+
+  useEffect(() => {
+    // Redirect if the user is already logged in and no longer loading.
+    if (!isAuthLoading && currentUser) {
+      router.push("/");
+    }
+  }, [currentUser, isAuthLoading, router]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,19 +41,28 @@ export default function LoginPage() {
       await login(email, password);
       toast({
         title: "Login Successful",
-        description: "Welcome back!",
+        description: "Welcome back! Redirecting...",
       });
-      router.push("/");
+      // The useEffect hook will handle the redirection once currentUser is set.
     } catch (error: any) {
       toast({
         variant: "destructive",
         title: "Login Failed",
         description: error.message || "Please check your credentials and try again.",
       });
-    } finally {
-      setIsLoading(false);
+       setIsLoading(false);
     }
   };
+  
+  // Show a loading spinner if auth state is still being determined.
+  if (isAuthLoading) {
+     return (
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+      </div>
+    );
+  }
+
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-background">
@@ -73,6 +89,7 @@ export default function LoginPage() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
+                  disabled={isLoading}
                 />
               </div>
               <div className="grid gap-2">
@@ -85,6 +102,7 @@ export default function LoginPage() {
                     required 
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
+                    disabled={isLoading}
                 />
               </div>
               <Button type="submit" className="w-full" disabled={isLoading}>
