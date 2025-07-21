@@ -47,12 +47,12 @@ export function CreateGroupDialog({ children, open, onOpenChange }: CreateGroupD
         toast({
             variant: "destructive",
             title: "You're already in!",
-            description: "You're automatically included in any group you create.",
+            description: "You're the creator, you're automatically included lol.",
         });
     } else {
          toast({
             variant: "destructive",
-            title: "Hmm, that email doesn't look right.",
+            title: "Hold up.",
             description: "Please enter a valid, unique email address.",
         });
     }
@@ -77,8 +77,8 @@ export function CreateGroupDialog({ children, open, onOpenChange }: CreateGroupD
       try {
         await createGroup(groupName, memberEmails);
         toast({
-          title: "Group Created!",
-          description: `The "${groupName}" group is all set up.`,
+          title: "Group created!",
+          description: `The "${groupName}" group is ready to roll.`,
         });
         resetForm();
         setIsOpen(false);
@@ -86,7 +86,7 @@ export function CreateGroupDialog({ children, open, onOpenChange }: CreateGroupD
         toast({
           variant: "destructive",
           title: "Error Creating Group",
-          description: error.message || "Something went wrong. Please try again.",
+          description: "Something went sideways. Please try again.",
         });
       }
     });
@@ -102,7 +102,7 @@ export function CreateGroupDialog({ children, open, onOpenChange }: CreateGroupD
         <DialogHeader>
           <DialogTitle>Create a New Group</DialogTitle>
           <DialogDescription>
-            Create a group to start sharing expenses for trips, your home, or anything else.
+            Start a group for a trip, your house, or whatever. Let the shared spending begin.
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">

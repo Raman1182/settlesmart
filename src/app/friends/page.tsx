@@ -107,9 +107,9 @@ export default function FriendsPage() {
     startProcessingTransition(async () => {
       try {
         await sendFriendRequest(receiverId);
-        toast({ title: "Friend request sent!" });
+        toast({ title: "Request sent!", description: "They better say yes." });
       } catch (error: any) {
-        toast({ variant: "destructive", title: "Error", description: error.message });
+        toast({ variant: "destructive", title: "Yikes, an error.", description: "Couldn't send the request. Maybe try again?" });
       }
     });
   };
@@ -118,9 +118,9 @@ export default function FriendsPage() {
     startProcessingTransition(async () => {
       try {
         await acceptFriendRequest(friendshipId);
-        toast({ title: "Friend request accepted!" });
+        toast({ title: "It's official!", description: "You're now friends. Don't be weird about it." });
       } catch (error: any) {
-        toast({ variant: "destructive", title: "Error", description: error.message });
+        toast({ variant: "destructive", title: "Error accepting", description: "Something went wrong. The friendship remains in limbo." });
       }
     });
   };
@@ -129,9 +129,9 @@ export default function FriendsPage() {
      startProcessingTransition(async () => {
       try {
         await declineFriendRequest(friendshipId);
-        toast({ title: "Friend request declined." });
+        toast({ title: "Request declined.", description: "Maybe it wasn't meant to be." });
       } catch (error: any) {
-        toast({ variant: "destructive", title: "Error", description: error.message });
+        toast({ variant: "destructive", title: "Error declining", description: "Could not decline. Awkward." });
       }
     });
   };
@@ -140,9 +140,9 @@ export default function FriendsPage() {
      startProcessingTransition(async () => {
       try {
         await removeFriend(friendId);
-        toast({ title: "Friend removed." });
+        toast({ title: "Friend removed.", description: "It's okay, people grow apart." });
       } catch (error: any) {
-        toast({ variant: "destructive", title: "Error", description: error.message });
+        toast({ variant: "destructive", title: "Can't unfriend rn.", description: "The system wants you to stay friends. For now." });
       }
     });
   }
@@ -179,6 +179,7 @@ export default function FriendsPage() {
       if (!friend) return;
         await settleFriendDebt(friend.id);
         setSelectedFriendForHistory(null);
+        toast({ title: "All settled up!", description: `Your debts with ${friend.name} are now even stevens.`})
     }
     const isSettled = Math.abs(netBalance) < 0.01;
 
@@ -188,7 +189,7 @@ export default function FriendsPage() {
                 <DialogHeader>
                     <DialogTitle>History with {friend.name}</DialogTitle>
                     <DialogDescription>
-                         {isSettled && "You are all settled up!"}
+                         {isSettled && "You two are all settled up! High five."}
                          {!isSettled && netBalance > 0 && `${friend.name} owes you ${formatCurrency(netBalance)}`}
                          {!isSettled && netBalance < 0 && `You owe ${friend.name} ${formatCurrency(Math.abs(netBalance))}`}
                     </DialogDescription>
@@ -208,7 +209,7 @@ export default function FriendsPage() {
                                   <Badge variant={e.status === 'settled' ? 'secondary' : 'default'}>{e.status}</Badge>
                             </div>
                         </div>
-                    )) : <p className="text-center text-muted-foreground py-4">No 1-on-1 transactions yet.</p>}
+                    )) : <p className="text-center text-muted-foreground py-4">No 1-on-1 transactions yet. Go buy 'em a coffee!</p>}
                     </div>
                 </ScrollArea>
                 <AlertDialog>
@@ -219,12 +220,12 @@ export default function FriendsPage() {
                       <AlertDialogHeader>
                           <AlertDialogTitle>Settle debts with {friend.name}?</AlertDialogTitle>
                           <AlertDialogDescription>
-                              This will mark all outstanding 1-on-1 expenses between you and {friend.name} as settled. This action cannot be undone.
+                              This marks all 1-on-1 expenses as paid. Make sure you've actually got the cash. This can't be undone.
                           </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
-                          <AlertDialogCancel>Cancel</AlertDialogCancel>
-                          <AlertDialogAction onClick={handleSettle}>Yes, Settle Up</AlertDialogAction>
+                          <AlertDialogCancel>Nvm, cancel</AlertDialogCancel>
+                          <AlertDialogAction onClick={handleSettle}>Yeah, we're square</AlertDialogAction>
                       </AlertDialogFooter>
                   </AlertDialogContent>
               </AlertDialog>
@@ -260,8 +261,8 @@ export default function FriendsPage() {
               <TabsContent value="friends">
                  <Card>
                     <CardHeader>
-                        <CardTitle>Your Friends</CardTitle>
-                        <CardDescription>Your connections and contacts on SettleSmart.</CardDescription>
+                        <CardTitle>Your Squad</CardTitle>
+                        <CardDescription>Your connections on SettleSmart. Or as you call them, "the group chat".</CardDescription>
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-4">
@@ -297,7 +298,7 @@ export default function FriendsPage() {
                                     </DropdownMenuItem>
                                     <DropdownMenuItem onSelect={() => setSelectedFriendForScore(friend)}>
                                         <Shield className="mr-2 h-4 w-4" />
-                                        <span>Trust Score</span>
+                                        <span>Vibe Check (Trust Score)</span>
                                     </DropdownMenuItem>
                                     <DropdownMenuItem onSelect={() => handleRemoveFriend(friend.id)}>
                                         <UserMinus className="mr-2 h-4 w-4 text-destructive" />
@@ -309,8 +310,8 @@ export default function FriendsPage() {
                         )})}
                          {friends.length === 0 && (
                             <div className="col-span-full flex flex-col items-center justify-center text-center text-muted-foreground h-full rounded-lg border-2 border-dashed border-muted/50 py-12">
-                                <h3 className="text-xl font-bold mb-2">No friends yet</h3>
-                                <p className="mb-4">Add an expense with someone, or find users in the "Discover" tab to add friends.</p>
+                                <h3 className="text-xl font-bold mb-2">It's quiet in here...</h3>
+                                <p className="mb-4">Add an expense with someone, or find them in "Discover" to get the party started.</p>
                             </div>
                         )}
                       </div>
@@ -322,7 +323,7 @@ export default function FriendsPage() {
                  <Card>
                     <CardHeader>
                         <CardTitle>Friend Requests</CardTitle>
-                        <CardDescription>People who want to connect with you.</CardDescription>
+                        <CardDescription>People who want to be in your financial circle.</CardDescription>
                     </CardHeader>
                     <CardContent>
                        <div className="space-y-4">
@@ -346,8 +347,8 @@ export default function FriendsPage() {
                           ))}
                            {friendRequests.length === 0 && (
                               <div className="col-span-full flex flex-col items-center justify-center text-center text-muted-foreground h-full rounded-lg border-2 border-dashed border-muted/50 py-12">
-                                  <h3 className="text-xl font-bold mb-2">No new friend requests</h3>
-                                  <p className="mb-4">Check back later!</p>
+                                  <h3 className="text-xl font-bold mb-2">No new requests</h3>
+                                  <p className="mb-4">Your social circle is up to date. For now.</p>
                               </div>
                           )}
                        </div>
@@ -359,7 +360,7 @@ export default function FriendsPage() {
                   <Card>
                     <CardHeader>
                         <CardTitle>Discover Users</CardTitle>
-                        <CardDescription>Find and add other users on SettleSmart.</CardDescription>
+                        <CardDescription>Find other people on SettleSmart.</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <div className="space-y-4">
@@ -393,8 +394,8 @@ export default function FriendsPage() {
                             })}
                             {otherUsers.length === 0 && (
                                 <div className="col-span-full flex flex-col items-center justify-center text-center text-muted-foreground h-full rounded-lg border-2 border-dashed border-muted/50 py-12">
-                                    <h3 className="text-xl font-bold mb-2">You know everyone!</h3>
-                                    <p className="mb-4">There are no other users to add right now.</p>
+                                    <h3 className="text-xl font-bold mb-2">Wow, you know everyone!</h3>
+                                    <p className="mb-4">There are no other SettleSmart users to add right now.</p>
                                 </div>
                             )}
                         </div>
@@ -410,7 +411,7 @@ export default function FriendsPage() {
                 <AlertDialogHeader>
                     <AlertDialogTitle>{selectedFriendForScore?.name}'s Trust Score</AlertDialogTitle>
                     <AlertDialogDescription>
-                        This score reflects financial reliability based on their activity in the app. Higher is better!
+                        This score reflects their financial reliability based on their activity in the app. Higher is better!
                     </AlertDialogDescription>
                 </AlertDialogHeader>
                 <div className="py-4">

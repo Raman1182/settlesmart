@@ -36,35 +36,35 @@ export function GroupMembers({ group, isOwner }: GroupMembersProps) {
   
   const handleAddMember = () => {
     if (!newMemberEmail || groupMembers.some(m => m.email === newMemberEmail)) {
-        toast({ variant: "destructive", title: "Invalid or duplicate email." });
+        toast({ variant: "destructive", title: "Invalid or duplicate email.", description: "They're probably already in here." });
         return;
     }
     startUpdateTransition(async () => {
         try {
             await updateGroupMembers(group.id, [newMemberEmail], []);
-            toast({ title: "Member Added", description: `${newMemberEmail} has been invited to the group.`});
+            toast({ title: "Member Added", description: `${newMemberEmail} has been invited. Let's see if they accept.`});
             setNewMemberEmail("");
         } catch (error: any) {
-            toast({ variant: "destructive", title: "Error", description: error.message });
+            toast({ variant: "destructive", title: "Error adding member", description: "Couldn't add them. Skill issue?" });
         }
     });
   };
 
   const handleRemoveMember = (memberId: string) => {
     if (memberId === group.createdBy) {
-        toast({ variant: "destructive", title: "Cannot remove owner", description: "The group creator cannot be removed." });
+        toast({ variant: "destructive", title: "Can't remove owner", description: "You can't kick out the person who started the group. That's just rude." });
         return;
     }
      if (memberId === currentUser?.id) {
-        toast({ variant: "destructive", title: "Cannot remove yourself", description: "To leave a group, use the 'Leave Group' option." });
+        toast({ variant: "destructive", title: "Can't remove yourself", description: "To leave a group, use the 'Leave Group' option. Don't be dramatic." });
         return;
     }
     startUpdateTransition(async () => {
         try {
             await updateGroupMembers(group.id, [], [memberId]);
-            toast({ title: "Member Removed" });
+            toast({ title: "Member Removed.", description: "They have been yeeted from the group." });
         } catch (error: any) {
-             toast({ variant: "destructive", title: "Error", description: error.message });
+             toast({ variant: "destructive", title: "Couldn't remove.", description: "Something went wrong. They're still here. Awkward." });
         }
     });
   };
@@ -73,7 +73,7 @@ export function GroupMembers({ group, isOwner }: GroupMembersProps) {
     <Card>
         <CardHeader>
             <CardTitle>Group Members</CardTitle>
-            <CardDescription>Manage who is in this group. {isOwner && "As the owner, you can add or remove members."}</CardDescription>
+            <CardDescription>Manage who's in this group. {isOwner && "As the owner, you hold all the power."}</CardDescription>
         </CardHeader>
         <CardContent>
             <div className="space-y-4">

@@ -173,16 +173,16 @@ export function AddExpenseSheet({ children, open, onOpenChange }: AddExpenseShee
           form.setValue("splitWith", finalParticipants);
 
           toast({
-            title: "Sweet! Expense auto-filled.",
-            description: "We've parsed the details. Please review and submit.",
+            title: "Presto! Expense auto-filled.",
+            description: "The AI did its thing. Just check the deets and submit.",
           });
         }
       } catch (error) {
         console.error("AI parsing failed:", error);
         toast({
           variant: "destructive",
-          title: "Oops! My AI brain hiccuped.",
-          description: "We couldn't understand that. Please fill out the form manually.",
+          title: "AI brain fart.",
+          description: "Couldn't figure that one out. You gotta enter it manually.",
         });
       }
     });
@@ -210,8 +210,8 @@ export function AddExpenseSheet({ children, open, onOpenChange }: AddExpenseShee
         addExpense({ ...finalValues, groupId: finalValues.groupId || null, category: category || 'Other' });
         
         toast({
-            title: "Expense Added!",
-            description: `Got it. "${values.description}" is on the books.`,
+            title: "Expense added!",
+            description: `Got it. "${values.description}" is officially on the books.`,
         });
         resetForm();
         setControlledOpen(false);
@@ -219,8 +219,8 @@ export function AddExpenseSheet({ children, open, onOpenChange }: AddExpenseShee
         console.error("Failed to add expense:", error);
         toast({
             variant: "destructive",
-            title: "Uh oh, something went wrong.",
-            description: "Couldn't save the expense. Please try again.",
+            title: "Uh oh, something broke.",
+            description: "Couldn't save the expense. Please try again in a bit.",
         });
       }
     });
@@ -299,7 +299,7 @@ export function AddExpenseSheet({ children, open, onOpenChange }: AddExpenseShee
         <SheetHeader className="p-6">
           <SheetTitle>Log a New Expense</SheetTitle>
           <SheetDescription>
-            Describe your expense in plain English, scan a receipt, or fill out the form manually.
+            Use your words, scan a receipt, or just fill out the form. You do you.
           </SheetDescription>
         </SheetHeader>
         <div className="p-6 border-y border-border/50 bg-card/50">
@@ -380,7 +380,7 @@ export function AddExpenseSheet({ children, open, onOpenChange }: AddExpenseShee
                         {groups.map(group => <SelectItem key={group.id} value={group.id}>{group.name}</SelectItem>)}
                       </SelectContent>
                     </Select>
-                    <FormDescription>Selecting a group pre-fills participants.</FormDescription>
+                    <FormDescription>Choosing a group pre-fills the squad.</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -427,7 +427,7 @@ export function AddExpenseSheet({ children, open, onOpenChange }: AddExpenseShee
                     <FormItem>
                         <div>
                             <FormLabel className="text-base">Split between</FormLabel>
-                            <FormDescription>Select participants for this expense.</FormDescription>
+                            <FormDescription>Pick who's in on this expense.</FormDescription>
                         </div>
                         <div className="space-y-3 pt-2">
                         {participantsToDisplay.map((item) => (
@@ -565,7 +565,7 @@ export function AddExpenseSheet({ children, open, onOpenChange }: AddExpenseShee
                       Recurring Expense
                     </FormLabel>
                     <FormDescription>
-                      Is this a recurring expense, like rent or a subscription?
+                      Is this a recurring thing, like rent or a sub?
                     </FormDescription>
                   </div>
                   <FormControl>

@@ -46,10 +46,10 @@ export default function GroupDetailsPage() {
     startDeleteTransition(async () => {
       try {
         await deleteGroup(group.id);
-        toast({ title: "Group Deleted", description: `The "${group.name}" group has been permanently deleted.` });
+        toast({ title: "Group Deleted.", description: `The "${group.name}" group is officially history.` });
         router.push('/groups');
       } catch (error: any) {
-        toast({ variant: "destructive", title: "Error", description: error.message });
+        toast({ variant: "destructive", title: "Can't delete.", description: "Something went wrong. The group lives on." });
       }
     });
   }
@@ -59,10 +59,10 @@ export default function GroupDetailsPage() {
     startLeaveTransition(async () => {
         try {
             await leaveGroup(group.id);
-            toast({ title: "You've left the group", description: `You are no longer a member of "${group.name}".`});
+            toast({ title: "You've left the group", description: `You are no longer a member of "${group.name}". Peace out!`});
             router.push('/groups');
         } catch (error: any) {
-            toast({ variant: "destructive", title: "Error leaving group", description: error.message });
+            toast({ variant: "destructive", title: "Can't leave rn.", description: "The app is weirdly attached to you. Try again." });
         }
     })
   }
@@ -70,7 +70,7 @@ export default function GroupDetailsPage() {
   const handleSettleAll = () => {
     if (!group) return;
     settleAllInGroup(group.id);
-    toast({ title: "All Settled!", description: `All debts in ${group.name} have been cleared.` });
+    toast({ title: "Boom! All Settled.", description: `All debts in ${group.name} have been cleared. We're all even.` });
   }
   
   if (isAuthLoading || !currentUser) {
@@ -125,9 +125,9 @@ export default function GroupDetailsPage() {
                                 </AlertDialogTrigger>
                                 <AlertDialogContent>
                                     <AlertDialogHeader>
-                                        <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                                        <AlertDialogTitle>Are you sure about this?</AlertDialogTitle>
                                         <AlertDialogDescription>
-                                            This action cannot be undone. This will permanently delete the <strong>{group.name}</strong> group and all of its expenses.
+                                            This cannot be undone. It will permanently delete the <strong>{group.name}</strong> group and all its expenses. Like, forever forever.
                                         </AlertDialogDescription>
                                     </AlertDialogHeader>
                                     <AlertDialogFooter>
@@ -151,16 +151,16 @@ export default function GroupDetailsPage() {
                              </AlertDialogTrigger>
                              <AlertDialogContent>
                                     <AlertDialogHeader>
-                                        <AlertDialogTitle>Leave "{group.name}"?</AlertDialogTitle>
+                                        <AlertDialogTitle>Dip out of "{group.name}"?</AlertDialogTitle>
                                         <AlertDialogDescription>
-                                            You will no longer be a member of this group. You can only rejoin if the owner invites you back.
+                                            You won't be a member anymore. You can only rejoin if the owner is cool enough to invite you back.
                                         </AlertDialogDescription>
                                     </AlertDialogHeader>
                                     <AlertDialogFooter>
                                         <AlertDialogCancel>Cancel</AlertDialogCancel>
                                         <AlertDialogAction onClick={handleLeaveGroup}>
                                             {isLeaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                                            Yes, leave group
+                                            Yes, I'm out
                                         </AlertDialogAction>
                                     </AlertDialogFooter>
                                 </AlertDialogContent>
@@ -191,11 +191,11 @@ export default function GroupDetailsPage() {
                                 <AlertDialogHeader>
                                 <AlertDialogTitle>Simplified Group Debts</AlertDialogTitle>
                                 <AlertDialogDescription>
-                                    Here are the minimum number of payments needed for everyone to settle up.
+                                    Here's the fastest way for everyone to get square. No more messy chains of payments.
                                 </AlertDialogDescription>
                                 </AlertDialogHeader>
                                 <div className="space-y-4 py-4">
-                                    {simplifiedDebts.length === 0 && <p className="text-center text-muted-foreground">Everyone is settled up!</p>}
+                                    {simplifiedDebts.length === 0 && <p className="text-center text-muted-foreground">Everyone is settled up! The vibes are immaculate.</p>}
                                     {simplifiedDebts.map((s, i) => (
                                         <div key={i} className="flex items-center justify-between text-sm">
                                             <div className="flex items-center gap-2">
@@ -221,7 +221,7 @@ export default function GroupDetailsPage() {
                                     ))}
                                 </div>
                                 <AlertDialogFooter>
-                                    <AlertDialogCancel>Close</AlertDialogCancel>
+                                    <AlertDialogCancel>Got it</AlertDialogCancel>
                                 </AlertDialogFooter>
                             </AlertDialogContent>
                           </AlertDialog>
@@ -233,12 +233,12 @@ export default function GroupDetailsPage() {
                                 <AlertDialogHeader>
                                 <AlertDialogTitle>Settle all debts in {group.name}?</AlertDialogTitle>
                                 <AlertDialogDescription>
-                                    This will mark all outstanding balances in this group as zero. This assumes all members have paid each other offline. This action cannot be undone.
+                                    This marks everything as settled. Assumes everyone paid up offline. No backsies.
                                 </AlertDialogDescription>
                                 </AlertDialogHeader>
                                 <AlertDialogFooter>
-                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                    <AlertDialogAction onClick={handleSettleAll}>Confirm & Settle All</AlertDialogAction>
+                                    <AlertDialogCancel>Nvm</AlertDialogCancel>
+                                    <AlertDialogAction onClick={handleSettleAll}>Confirm & Settle</AlertDialogAction>
                                 </AlertDialogFooter>
                             </AlertDialogContent>
                           </AlertDialog>

@@ -36,10 +36,10 @@ export function GroupChecklist({ group }: GroupChecklistProps) {
             try {
                 const result = await generateShoppingList({ prompt });
                 updateGroupChecklist(group.id, result.items);
-                toast({ title: "Checklist Generated!", description: "Your AI-powered checklist is ready." });
+                toast({ title: "Checklist Generated!", description: "Your AI-powered list is ready. No excuses now." });
                 setPrompt("");
             } catch (error) {
-                toast({ variant: "destructive", title: "Error", description: "Failed to generate checklist." });
+                toast({ variant: "destructive", title: "AI is on a break.", description: "Failed to generate the list. Try being less specific... or more." });
             }
         });
     };
@@ -64,8 +64,8 @@ export function GroupChecklist({ group }: GroupChecklistProps) {
             <CardHeader>
                 <CardTitle>Group Checklist</CardTitle>
                 <CardDescription>
-                    Plan and track items for your group. Use AI to generate a list!
-                    {totalCount > 0 && ` (${completedCount}/${totalCount} completed)`}
+                    Plan and track stuff for your group. Let the AI make a list for you.
+                    {totalCount > 0 && ` (${completedCount}/${totalCount} done)`}
                 </CardDescription>
             </CardHeader>
             <CardContent>
@@ -92,8 +92,8 @@ export function GroupChecklist({ group }: GroupChecklistProps) {
                     <div className="space-y-3">
                         {checklist.length === 0 && (
                              <div className="text-center text-muted-foreground py-8">
-                                <p>No items in your checklist yet.</p>
-                                <p className="text-sm">Generate one with AI or add items manually (coming soon).</p>
+                                <p>This checklist is looking empty.</p>
+                                <p className="text-sm">Generate one with AI or something.</p>
                              </div>
                         )}
                         {checklist.map(item => (

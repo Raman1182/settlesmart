@@ -26,18 +26,18 @@ export default function LoginPage() {
     try {
       if (isSignUp) {
         await signUp(email, password);
-        toast({ title: "Welcome aboard!", description: "Your account has been created. You are now logged in." });
+        toast({ title: "Ayy, you're in!", description: "Account created. Let's get this bread." });
       } else {
         await signIn(email, password);
-        toast({ title: "Welcome back!" });
+        toast({ title: "Welcome back, legend!" });
       }
       router.push("/");
     } catch (error: any) {
       console.error(error);
       toast({
         variant: "destructive",
-        title: "Authentication Failed",
-        description: error.message,
+        title: "Oof, that didn't work.",
+        description: "Check your deets and try again. No cap.",
       });
       setIsLoading(false);
     }
