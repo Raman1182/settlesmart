@@ -60,25 +60,29 @@ interface SettleSmartContextType {
 
 const SettleSmartContext = createContext<SettleSmartContextType | undefined>(undefined);
 
+// A simple in-memory store to persist data across "logins" in the mock environment
+const appDataStore = {
+  users: [...mockUsers],
+  groups: [...mockGroups],
+  expenses: [...mockExpenses],
+  groupChecklists: {} as { [groupId: string]: ChecklistItem[] }
+};
+
+
 export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   
-  const [users, setUsers] = useState<User[]>([]);
-  const [groups, setGroups] = useState<Group[]>([]);
-  const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [groupChecklists, setGroupChecklists] = useState<{ [groupId: string]: ChecklistItem[] }>({});
+  const [users, setUsers] = useState<User[]>(appDataStore.users);
+  const [groups, setGroups] = useState<Group[]>(appDataStore.groups);
+  const [expenses, setExpenses] = useState<Expense[]>(appDataStore.expenses.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+  const [groupChecklists, setGroupChecklists] = useState<{ [groupId: string]: ChecklistItem[] }>(appDataStore.groupChecklists);
   const [messages, setMessages] = useState<Message[]>([]);
 
   useEffect(() => {
-    // Simulate loading static mock data once
-    setUsers(mockUsers);
-    setGroups(mockGroups);
-    setExpenses(mockExpenses.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
-
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
         if (user) {
-            const existingUser = mockUsers.find(u => u.email === user.email);
+            const existingUser = appDataStore.users.find(u => u.email === user.email);
             if (existingUser) {
               setCurrentUser({ ...existingUser, id: user.uid });
             } else {
@@ -89,7 +93,8 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
                 avatar: `https://placehold.co/100x100?text=${user.email!.charAt(0).toUpperCase()}`,
                 initials: user.email!.charAt(0).toUpperCase(),
               };
-              setUsers(prev => [...prev, newUser]);
+              appDataStore.users.push(newUser);
+              setUsers(appDataStore.users);
               setCurrentUser(newUser);
             }
         } else {
@@ -162,7 +167,8 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
       date: new Date().toISOString(),
       isRecurring: expenseData.isRecurring || false,
     };
-    setExpenses(prev => [newExpense, ...prev].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+    appDataStore.expenses.push(newExpense);
+    setExpenses(appDataStore.expenses.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
   };
   
   const createGroup = async (name: string, memberEmails: string[]) => {
@@ -174,15 +180,17 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
         if (user) {
           memberIds.add(user.id);
         } else {
+          // This logic is for ad-hoc (non-registered) members
           const newId = `user-${new Date().getTime()}-${Math.random()}`;
           const newUser: User = {
             id: newId,
             name: email.split('@')[0],
-            email: email,
+            email: email, // We can store the email to potentially link later
             avatar: `https://placehold.co/100x100?text=${email.charAt(0).toUpperCase()}`,
             initials: email.charAt(0).toUpperCase(),
           };
-          setUsers(prev => [...prev, newUser]);
+          appDataStore.users.push(newUser);
+          setUsers(appDataStore.users);
           memberIds.add(newId);
         }
       });
@@ -195,60 +203,58 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
         createdAt: new Date().toISOString(),
       };
       
-      setGroups(prev => [...prev, newGroup]);
+      appDataStore.groups.push(newGroup);
+      setGroups([...appDataStore.groups]);
   };
 
   const updateGroupMembers = async (groupId: string, memberEmailsToAdd: string[], memberIdsToRemove: string[]) => {
       const membersToAddIds = users.filter(u => memberEmailsToAdd.includes(u.email)).map(u => u.id);
-
-      setGroups(prevGroups => prevGroups.map(group => {
-        if (group.id === groupId) {
-          const newMembers = new Set(group.members);
+      
+      const groupIndex = appDataStore.groups.findIndex(g => g.id === groupId);
+      if (groupIndex > -1) {
+          const newMembers = new Set(appDataStore.groups[groupIndex].members);
           membersToAddIds.forEach(id => newMembers.add(id));
           memberIdsToRemove.forEach(id => newMembers.delete(id));
-          return { ...group, members: Array.from(newMembers) };
-        }
-        return group;
-      }));
+          appDataStore.groups[groupIndex].members = Array.from(newMembers);
+          setGroups([...appDataStore.groups]);
+      }
   };
   
   const deleteGroup = async (groupId: string) => {
-    setGroups(prev => prev.filter(g => g.id !== groupId));
-    setExpenses(prev => prev.filter(e => e.groupId !== groupId));
+    appDataStore.groups = appDataStore.groups.filter(g => g.id !== groupId);
+    appDataStore.expenses = appDataStore.expenses.filter(e => e.groupId !== groupId);
+    setGroups(appDataStore.groups);
+    setExpenses(appDataStore.expenses);
   };
   
   const leaveGroup = async (groupId: string) => {
      if (!currentUser) throw new Error("Not authenticated");
-     setGroups(prev => prev.map(g => {
-       if (g.id === groupId) {
-         return {
-           ...g,
-           members: g.members.filter(mId => mId !== currentUser.id)
-         }
-       }
-       return g;
-     }));
+     const groupIndex = appDataStore.groups.findIndex(g => g.id === groupId);
+      if (groupIndex > -1) {
+          appDataStore.groups[groupIndex].members = appDataStore.groups[groupIndex].members.filter(mId => mId !== currentUser.id);
+          setGroups([...appDataStore.groups]);
+      }
   };
   
   const updateGroupChecklist = (groupId: string, items: ChecklistItem[]) => {
-    setGroupChecklists(prev => ({
-        ...prev,
-        [groupId]: items,
-    }));
+    appDataStore.groupChecklists[groupId] = items;
+    setGroupChecklists({...appDataStore.groupChecklists});
   };
   
   const settleFriendDebt = async (friendId: string) => {
     if (!currentUser) throw new Error("Not authenticated");
-    const expensesToRemove = expenses.filter(e => {
+    const expensesToRemove = appDataStore.expenses.filter(e => {
         const participants = new Set(e.splitWith);
         return participants.size === 2 && participants.has(currentUser.id) && participants.has(friendId);
     });
 
-    setExpenses(prev => prev.filter(e => !expensesToRemove.some(er => er.id === e.id)));
+    appDataStore.expenses = appDataStore.expenses.filter(e => !expensesToRemove.some(er => er.id === e.id));
+    setExpenses(appDataStore.expenses);
   }
   
   const settleAllInGroup = (groupId: string) => {
-    setExpenses(prev => prev.filter(e => e.groupId !== groupId));
+    appDataStore.expenses = appDataStore.expenses.filter(e => e.groupId !== groupId);
+    setExpenses(appDataStore.expenses);
   };
 
   const calculateSettlements = useCallback((expensesToCalculate: Expense[], allParticipants: Participant[]) => {

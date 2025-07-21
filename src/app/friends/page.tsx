@@ -282,12 +282,18 @@ export default function FriendsPage() {
                         value={messageText}
                         onChange={(e) => setMessageText(e.target.value)}
                         disabled={isSendingMessage}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                                e.preventDefault();
+                                handleSendMessage();
+                            }
+                        }}
                     />
                     <Button type="submit" size="icon" onClick={handleSendMessage} disabled={isSendingMessage || !messageText.trim()}>
                         {isSendingMessage ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                     </Button>
                 </div>
-                <AlertDialogFooter>
+                <AlertDialogFooter className="sm:justify-start">
                     <AlertDialogCancel>Close</AlertDialogCancel>
                 </AlertDialogFooter>
             </>
