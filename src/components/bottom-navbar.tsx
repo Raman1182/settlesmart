@@ -16,7 +16,7 @@ export function BottomNavbar() {
     { href: "/", label: "Dashboard", icon: Home },
     { href: "/groups", label: "Groups", icon: Users, disabled: true },
     { href: "/friends", label: "Friends", icon: UserIcon, disabled: true },
-    { href: "/profile", label: "Profile", icon: Settings },
+    { href: "/profile", label: "Profile", icon: Settings, disabled: true },
   ];
 
   return (

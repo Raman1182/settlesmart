@@ -3,14 +3,7 @@
 
 import React, { createContext, useContext, useState, useMemo, useCallback, useEffect } from "react";
 import type { User, Group, Expense } from "@/lib/types";
-import { auth, db } from '@/lib/firebase';
-import { 
-  onAuthStateChanged, 
-  createUserWithEmailAndPassword, 
-  signInWithEmailAndPassword, 
-  signOut,
-} from "firebase/auth";
-import { doc, setDoc, getDoc, updateDoc, collection, query, where, getDocs, writeBatch, serverTimestamp, onSnapshot, arrayUnion, arrayRemove } from "firebase/firestore";
+import { users as mockUsers, groups as mockGroups, expenses as mockExpenses } from '@/lib/data';
 
 interface SettleSmartContextType {
   currentUser: User | null;
@@ -25,10 +18,6 @@ interface SettleSmartContextType {
     settlements: { from: User; to: User; amount: number }[];
   };
   findUserById: (id: string) => User | undefined;
-  login: (email: string, pass: string) => Promise<void>;
-  signup: (email: string, pass: string, name: string) => Promise<void>;
-  logout: () => Promise<void>;
-  updateUserProfile: (data: Partial<Omit<User, 'id' | 'email'>>) => Promise<void>;
   createGroup: (name: string, memberEmails: string[]) => Promise<void>;
   updateGroupMembers: (groupId: string, memberEmailsToAdd: string[], memberIdsToRemove: string[]) => Promise<void>;
 }
@@ -37,217 +26,78 @@ const SettleSmartContext = createContext<SettleSmartContextType | undefined>(und
 
 export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   
   const [users, setUsers] = useState<User[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
-  
-  const getInitials = (name: string) => {
-    const names = name.split(' ');
-    if (names.length > 1) {
-      return `${names[0][0]}${names[names.length - 1][0]}`.toUpperCase();
-    }
-    return name.substring(0, 2).toUpperCase();
-  }
 
-  const fetchUsers = useCallback(async (userIds: string[]) => {
-    if (userIds.length === 0) return;
+  useEffect(() => {
+    // Simulate loading mock data
+    setIsLoading(true);
+    setCurrentUser(mockUsers[0]);
+    setUsers(mockUsers);
     
-    const uniqueUserIds = [...new Set(userIds)];
-    const userIdsToFetch = uniqueUserIds.filter(id => !users.some(u => u.id === id));
-    if (userIdsToFetch.length === 0) return;
-
-    try {
-      const usersQuery = query(collection(db, "users"), where("__name__", "in", userIdsToFetch));
-      const querySnapshot = await getDocs(usersQuery);
-      const fetchedUsers = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
-      
-      setUsers(prevUsers => {
-          const newUsersMap = new Map(prevUsers.map(u => [u.id, u]));
-          fetchedUsers.forEach(fetchedUser => {
-              newUsersMap.set(fetchedUser.id, fetchedUser);
-          });
-          return Array.from(newUsersMap.values());
-      });
-
-    } catch (error) {
-        console.error("Error fetching user data:", error);
-    }
-  }, [users]);
-
-
-  useEffect(() => {
-    const authUnsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
-      if (firebaseUser) {
-        const userDocRef = doc(db, 'users', firebaseUser.uid);
-        const userUnsubscribe = onSnapshot(userDocRef, (doc) => {
-          if (doc.exists()) {
-            const userData = { id: doc.id, ...doc.data() } as User;
-            setCurrentUser(userData);
-            setUsers((prevUsers) => {
-              const userExists = prevUsers.some((u) => u.id === userData.id);
-              if (userExists) {
-                return prevUsers.map((u) => (u.id === userData.id ? userData : u));
-              }
-              return [...prevUsers, userData];
-            });
-          } else {
-             // This case might happen if user record is deleted but auth record remains
-            setCurrentUser(null);
-          }
-          setIsLoading(false);
-        }, (error) => {
-            console.error("Error listening to user document:", error);
-            setIsLoading(false);
-            setCurrentUser(null);
-        });
-
-        return () => userUnsubscribe();
-      } else {
-        setCurrentUser(null);
-        setGroups([]);
-        setExpenses([]);
-        setIsLoading(false);
-      }
-    });
-
-    return () => authUnsubscribe();
+    // Simulate group and expense data for the current user
+    const userGroups = mockGroups.filter(g => g.members.includes(mockUsers[0].id));
+    setGroups(userGroups);
+    
+    const userGroupIds = userGroups.map(g => g.id);
+    const userExpenses = mockExpenses
+      .filter(e => userGroupIds.includes(e.groupId))
+      .sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    setExpenses(userExpenses);
+    
+    setIsLoading(false);
   }, []);
-  
-  useEffect(() => {
-    if (currentUser) {
-      const groupsQuery = query(collection(db, "groups"), where("members", "array-contains", currentUser.id));
-      const unsubscribe = onSnapshot(groupsQuery, (snapshot) => {
-        const userGroups = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Group));
-        setGroups(userGroups);
-
-        const allMemberIds = userGroups.flatMap(g => g.members);
-        if (allMemberIds.length > 0) {
-          fetchUsers(allMemberIds);
-        }
-
-        if (userGroups.length > 0) {
-            const groupIds = userGroups.map(g => g.id);
-            const expensesQuery = query(collection(db, "expenses"), where("groupId", "in", groupIds));
-            const unsubExpenses = onSnapshot(expensesQuery, (expensesSnapshot) => {
-                const groupExpenses = expensesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), date: (doc.data().date as any).toDate ? (doc.data().date as any).toDate().toISOString() : doc.data().date } as Expense))
-                  .sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-                setExpenses(groupExpenses);
-            });
-            return () => unsubExpenses();
-        } else {
-            setExpenses([]);
-        }
-      }, (error) => {
-          console.error("Error listening to groups collection:", error);
-      });
-
-      return () => unsubscribe();
-    }
-  }, [currentUser, fetchUsers]);
-
 
   const findUserById = useCallback((id: string) => users.find(u => u.id === id), [users]);
 
-  const addExpense = async (expenseData: Omit<Expense, 'id' | 'date'>) => {
-    if (!currentUser) throw new Error("Not authenticated");
-    
-    const newExpenseRef = doc(collection(db, "expenses"));
-    await setDoc(newExpenseRef, {
-        ...expenseData,
-        date: serverTimestamp(),
-        createdBy: currentUser.id,
-    });
-  };
-  
-  const signup = async (email: string, password: string, name: string) => {
-    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-    const firebaseUser = userCredential.user;
-    const initials = getInitials(name);
-    const newUser: Omit<User, 'id'> = {
-      name,
-      email,
-      avatar: `https://placehold.co/100x100.png`,
-      initials,
+  const addExpense = (expenseData: Omit<Expense, 'id' | 'date'>) => {
+     if (!currentUser) throw new Error("No user found");
+    const newExpense: Expense = {
+      id: `exp-${new Date().getTime()}`,
+      ...expenseData,
+      date: new Date().toISOString(),
     };
-    await setDoc(doc(db, "users", firebaseUser.uid), newUser);
-  };
-
-  const login = async (email: string, password: string) => {
-    setIsLoading(true);
-    await signInWithEmailAndPassword(auth, email, password);
-  };
-
-  const logout = async () => {
-    await signOut(auth);
-  };
-  
-  const updateUserProfile = async (data: Partial<Omit<User, 'id' | 'email'>>) => {
-      if (!currentUser) throw new Error("Not authenticated");
-      const userDocRef = doc(db, "users", currentUser.id);
-
-      const updatedData: Partial<User> = { ...data };
-      if (data.name) {
-          updatedData.initials = getInitials(data.name);
-      }
-      
-      await updateDoc(userDocRef, updatedData);
+    setExpenses(prev => [newExpense, ...prev].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
   };
   
   const createGroup = async (name: string, memberEmails: string[]) => {
       if (!currentUser) throw new Error("Not authenticated");
-
       const memberIds = new Set<string>([currentUser.id]);
       
-      if (memberEmails.length > 0) {
-          const usersQuery = query(collection(db, "users"), where("email", "in", memberEmails));
-          const querySnapshot = await getDocs(usersQuery);
-          querySnapshot.forEach((doc) => {
-              memberIds.add(doc.id);
-          });
-      }
-      
-      const newGroupRef = doc(collection(db, "groups"));
-      await setDoc(newGroupRef, {
-          name,
-          members: Array.from(memberIds),
-          createdAt: serverTimestamp(),
-          createdBy: currentUser.id,
+      memberEmails.forEach(email => {
+        const user = users.find(u => u.email === email);
+        if (user) {
+          memberIds.add(user.id);
+        }
       });
+      
+      const newGroup: Group = {
+        id: `group-${new Date().getTime()}`,
+        name,
+        members: Array.from(memberIds),
+        createdBy: currentUser.id,
+        createdAt: new Date().toISOString(),
+      };
+      
+      setGroups(prev => [...prev, newGroup]);
   };
 
   const updateGroupMembers = async (groupId: string, memberEmailsToAdd: string[], memberIdsToRemove: string[]) => {
-      const groupRef = doc(db, "groups", groupId);
-      const membersToAddIds: string[] = [];
+      const membersToAddIds = users.filter(u => memberEmailsToAdd.includes(u.email)).map(u => u.id);
 
-      if (memberEmailsToAdd.length > 0) {
-          const usersQuery = query(collection(db, "users"), where("email", "in", memberEmailsToAdd));
-          const querySnapshot = await getDocs(usersQuery);
-          if(querySnapshot.empty && memberEmailsToAdd.length > 0){
-             throw new Error(`User with email ${memberEmailsToAdd[0]} not found.`);
-          }
-          querySnapshot.forEach((doc) => {
-              membersToAddIds.push(doc.id);
-          });
-      }
-      
-      const batch = writeBatch(db);
-
-      if (membersToAddIds.length > 0) {
-         batch.update(groupRef, { members: arrayUnion(...membersToAddIds) });
-      }
-      if (memberIdsToRemove.length > 0) {
-          batch.update(groupRef, { members: arrayRemove(...memberIdsToRemove) });
-      }
-
-      await batch.commit();
-      
-      if (membersToAddIds.length > 0) {
-        fetchUsers(membersToAddIds);
-      }
+      setGroups(prevGroups => prevGroups.map(group => {
+        if (group.id === groupId) {
+          const newMembers = new Set(group.members);
+          membersToAddIds.forEach(id => newMembers.add(id));
+          memberIdsToRemove.forEach(id => newMembers.delete(id));
+          return { ...group, members: Array.from(newMembers) };
+        }
+        return group;
+      }));
   };
-
 
   
   const balances = useMemo(() => {
@@ -324,10 +174,6 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     addExpense,
     balances,
     findUserById,
-    login,
-    signup,
-    logout,
-    updateUserProfile,
     createGroup,
     updateGroupMembers,
   };
