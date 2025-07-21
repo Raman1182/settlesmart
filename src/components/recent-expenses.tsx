@@ -1,5 +1,6 @@
 
 "use client";
+import { useMemo } from 'react';
 import {
     Card,
     CardContent,
@@ -24,6 +25,10 @@ import { formatCurrency } from "@/lib/utils";
 export function RecentExpenses() {
     const { expenses, findUserById, groups, currentUser } = useSettleSmart();
 
+    const sortedExpenses = useMemo(() => {
+        return [...expenses].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    }, [expenses]);
+
     const getGroupName = (groupId: string | null) => {
         if (!groupId) return 'Personal Expense';
         return groups.find(g => g.id === groupId)?.name || 'N/A';
@@ -47,14 +52,14 @@ export function RecentExpenses() {
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {expenses.length === 0 && (
+                        {sortedExpenses.length === 0 && (
                             <TableRow>
                                 <TableCell colSpan={5} className="h-24 text-center">
                                 No expenses yet. Add one to get started!
                                 </TableCell>
                             </TableRow>
                         )}
-                        {expenses.slice(0, 15).map(expense => {
+                        {sortedExpenses.slice(0, 15).map(expense => {
                             const paidByUser = findUserById(expense.paidById);
                             return (
                                 <TableRow key={expense.id}>
