@@ -73,7 +73,11 @@ export function SpendingOverTimeChart() {
                             tickLine={false}
                             axisLine={false}
                             tickMargin={10}
-                            tickFormatter={(value) => formatCurrency(Number(value) / 1000) + 'k'}
+                            tickFormatter={(value) => {
+                                const num = Number(value);
+                                if (isNaN(num)) return '$0';
+                                return `$${(num / 1000).toFixed(0)}k`;
+                            }}
                          />
                         <ChartTooltip
                             cursor={false}
