@@ -3,7 +3,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Users, Plus, User as UserIcon, Settings } from "lucide-react";
+import { Home, Users, Plus, User as UserIcon, LineChart } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AddExpenseSheet } from "./add-expense-sheet";
 import { Button } from "./ui/button";
@@ -15,8 +15,8 @@ export function BottomNavbar() {
     { href: "/", label: "Dashboard", icon: Home },
     { href: "/groups", label: "Groups", icon: Users },
     { href: "#", label: "Add", icon: Plus, isAction: true },
-    { href: "/friends", label: "Friends", icon: UserIcon, disabled: true },
-    { href: "/profile", label: "Profile", icon: Settings, disabled: true },
+    { href: "/friends", label: "Friends", icon: UserIcon },
+    { href: "/insights", label: "Insights", icon: LineChart },
   ];
 
   return (
@@ -37,11 +37,10 @@ export function BottomNavbar() {
           return (
              <Link
                 key={item.label}
-                href={item.disabled ? "#" : item.href}
+                href={item.href}
                 className={cn(
                 "inline-flex flex-col items-center justify-center px-5 hover:bg-muted/50 group",
-                pathname === item.href ? "text-primary" : "text-muted-foreground",
-                item.disabled && "cursor-not-allowed opacity-50"
+                pathname === item.href ? "text-primary" : "text-muted-foreground"
                 )}
             >
                 <item.icon className="w-6 h-6 mb-1" />

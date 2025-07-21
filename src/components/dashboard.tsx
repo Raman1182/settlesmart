@@ -4,9 +4,7 @@
 import { Header } from "@/components/header";
 import { DashboardOverview } from "@/components/dashboard-overview";
 import { RecentExpenses } from "@/components/recent-expenses";
-import { SpendingByCategoryChart } from "./spending-by-category-chart";
 import { BalanceDetails } from "./balance-details";
-import { SpendingOverTimeChart } from "./spending-over-time-chart";
 import { useSettleSmart } from "@/context/settle-smart-context";
 import { Loader2 } from "lucide-react";
 import { GroupsOverview } from "./groups-overview";
@@ -32,12 +30,10 @@ export function Dashboard() {
         <div className="grid gap-4 md:gap-8 lg:grid-cols-3">
            <div className="lg:col-span-2 grid auto-rows-max gap-4 md:gap-8">
                <RecentExpenses />
-               <SpendingOverTimeChart />
           </div>
           <div className="grid auto-rows-max gap-4 md:gap-8">
               <BalanceDetails />
               <GroupsOverview />
-              <SpendingByCategoryChart />
           </div>
         </div>
       </main>
