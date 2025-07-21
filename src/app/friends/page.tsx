@@ -31,6 +31,7 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
 } from "@/components/ui/dialog"
 import { TrustScoreIndicator } from "@/components/trust-score-indicator";
 import { formatCurrency, cn } from "@/lib/utils";
@@ -48,7 +49,7 @@ export default function FriendsPage() {
     acceptFriendRequest, 
     declineFriendRequest,
     removeFriend,
-    settleFriendDebt,
+    initiateSettlement,
     chats,
     expenses,
     findUserById,
@@ -151,37 +152,42 @@ export default function FriendsPage() {
     const friend = selectedFriendForHistory;
     if (!friend || !currentUser) return null;
 
-     const { netBalance, transactionHistory } = useMemo(() => {
+     const { netBalance, transactionHistory, unsettledExpenseIds } = useMemo(() => {
         let balance = 0;
         const history: Expense[] = [];
+        const unsettledIds: string[] = [];
         
         expenses.forEach(e => {
             const participants = new Set(e.splitWith);
             if (!e.groupId && participants.has(currentUser.id) && participants.has(friend.id) && participants.size === 2) {
                 history.push(e);
                 if (e.status === 'unsettled') {
+                    unsettledIds.push(e.id);
                     const amountPerPerson = e.amount / 2;
                     if (e.paidById === currentUser.id) {
-                        balance += amountPerPerson;
+                        balance += amountPerPerson; // friend owes me
                     } else {
-                        balance -= amountPerPerson;
+                        balance -= amountPerPerson; // I owe friend
                     }
                 }
             }
         });
         
         history.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-        return { netBalance: balance, transactionHistory: history };
+        return { netBalance: balance, transactionHistory: history, unsettledExpenseIds: unsettledIds };
 
     }, [currentUser, friend, expenses]);
 
     const handleSettle = async () => {
-      if (!friend) return;
-        await settleFriendDebt(friend.id);
+      if (!friend || iOweFriend) return;
+        await initiateSettlement(friend.id, unsettledExpenseIds);
         setSelectedFriendForHistory(null);
-        toast({ title: "All settled up!", description: `Your debts with ${friend.name} are now even stevens.`})
+        toast({ title: "Confirmation sent!", description: `A confirmation request has been sent to ${friend.name}. They need to verify the payment.`})
     }
-    const isSettled = Math.abs(netBalance) < 0.01;
+    
+    const iOweFriend = netBalance < -0.01;
+    const friendOwesMe = netBalance > 0.01;
+    const isSettled = !iOweFriend && !friendOwesMe;
 
     return (
         <Dialog open={!!selectedFriendForHistory} onOpenChange={(open) => !open && setSelectedFriendForHistory(null)}>
@@ -190,8 +196,8 @@ export default function FriendsPage() {
                     <DialogTitle>History with {friend.name}</DialogTitle>
                     <DialogDescription>
                          {isSettled && "You two are all settled up! High five."}
-                         {!isSettled && netBalance > 0 && `${friend.name} owes you ${formatCurrency(netBalance)}`}
-                         {!isSettled && netBalance < 0 && `You owe ${friend.name} ${formatCurrency(Math.abs(netBalance))}`}
+                         {friendOwesMe && `${friend.name} owes you ${formatCurrency(netBalance)}`}
+                         {iOweFriend && `You owe ${friend.name} ${formatCurrency(Math.abs(netBalance))}`}
                     </DialogDescription>
                 </DialogHeader>
                 <ScrollArea className="max-h-[60vh]">
@@ -214,18 +220,18 @@ export default function FriendsPage() {
                 </ScrollArea>
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
-                    <Button disabled={isSettled}>Settle Up</Button>
+                     <Button disabled={isSettled || friendOwesMe}>I've Paid My Debt</Button>
                   </AlertDialogTrigger>
                   <AlertDialogContent>
                       <AlertDialogHeader>
-                          <AlertDialogTitle>Settle debts with {friend.name}?</AlertDialogTitle>
+                          <AlertDialogTitle>Did you pay {friend.name}?</AlertDialogTitle>
                           <AlertDialogDescription>
-                              This marks all 1-on-1 expenses as paid. Make sure you've actually got the cash. This can't be undone.
+                              This will send a notification to {friend.name} to confirm they received your payment. Debts will be marked as settled only after they confirm.
                           </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
                           <AlertDialogCancel>Nvm, cancel</AlertDialogCancel>
-                          <AlertDialogAction onClick={handleSettle}>Yeah, we're square</AlertDialogAction>
+                          <AlertDialogAction onClick={handleSettle}>Yep, I Paid</AlertDialogAction>
                       </AlertDialogFooter>
                   </AlertDialogContent>
               </AlertDialog>
@@ -427,3 +433,5 @@ export default function FriendsPage() {
     </>
   );
 }
+
+    

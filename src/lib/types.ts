@@ -1,3 +1,4 @@
+
 export type User = {
   id: string; // This will be the Firebase Auth UID
   name: string;
@@ -65,7 +66,10 @@ export interface Message {
   text: string;
   timestamp: any;
   read: boolean;
-  type?: 'system' | 'user';
+  type?: 'system' | 'user' | 'system_confirmation';
+  status?: 'pending' | 'confirmed' | 'declined';
+  recipientId?: string;
+  relatedExpenseIds?: string[];
 }
 
 export interface Chat {
@@ -75,3 +79,5 @@ export interface Chat {
     lastMessage: Message | null;
     unreadCount: { [userId: string]: number };
 }
+
+    

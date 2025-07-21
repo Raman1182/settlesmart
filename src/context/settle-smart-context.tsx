@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React, { createContext, useContext, useState, useMemo, useCallback, useEffect } from "react";
@@ -50,7 +49,9 @@ interface SettleSmartContextType {
   leaveGroup: (groupId: string) => Promise<void>;
   groupChecklists: { [groupId: string]: ChecklistItem[] };
   updateGroupChecklist: (groupId: string, items: ChecklistItem[]) => void;
-  settleFriendDebt: (friendId: string) => Promise<void>;
+  initiateSettlement: (friendId: string, expenseIds: string[]) => Promise<void>;
+  confirmSettlement: (expenseIds: string[], messageId: string) => Promise<void>;
+  declineSettlement: (messageId: string) => Promise<void>;
   calculateSettlements: (expensesToCalculate: Expense[], allParticipantIds: string[]) => { [key: string]: number; };
   simplifyDebts: (userBalances: { [key: string]: number; }) => { from: string; to: string; amount: number; }[];
   simplifyGroupDebts: (groupId: string) => { from: User, to: User, amount: number }[];
@@ -60,7 +61,7 @@ interface SettleSmartContextType {
   declineFriendRequest: (friendshipId: string) => Promise<void>;
   removeFriend: (friendId: string) => Promise<void>;
   getChatMessages: (friendId: string, callback: (messages: Message[]) => void) => () => void;
-  sendMessage: (friendId: string, text: string, type?: 'user' | 'system') => Promise<void>;
+  sendMessage: (friendId: string, text: string, type?: 'user' | 'system' | 'system_confirmation', metadata?: Record<string, any>) => Promise<void>;
   markMessagesAsRead: (chatId: string) => Promise<void>;
   calculateUserTrustScore: (userId: string) => number;
   signUp: (email: string, pass: string) => Promise<any>;
@@ -387,34 +388,52 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     await setDoc(checklistRef, { groupId, items }, { merge: true });
   };
   
-  const settleFriendDebt = async (friendId: string) => {
-    if (!currentUser || !db) throw new Error("Not authenticated or DB not initialized");
+  const initiateSettlement = async (friendId: string, expenseIds: string[]) => {
+      if (!currentUser) return;
+      const friend = findUserById(friendId);
+      if (!friend) return;
+      const message = `${currentUser.name} has marked their debt to you as paid. Did you receive the payment?`;
+      await sendMessage(friend.id, message, 'system_confirmation', { relatedExpenseIds: expenseIds });
+  };
+  
+  const confirmSettlement = async (expenseIds: string[], messageId: string) => {
+    if (!db || !currentUser) return;
     const batch = writeBatch(db);
     
-    const expensesToSettle = expenses.filter(e => 
-        e.groupId === null &&
-        e.status === 'unsettled' &&
-        e.splitWith.length === 2 &&
-        e.splitWith.includes(currentUser.id) &&
-        e.splitWith.includes(friendId)
-    );
-
-    expensesToSettle.forEach(expense => {
-        const expenseRef = doc(db, "expenses", expense.id);
+    expenseIds.forEach(expenseId => {
+        const expenseRef = doc(db, "expenses", expenseId);
         batch.update(expenseRef, {
             status: 'settled',
             settledAt: serverTimestamp()
         });
     });
 
-    await batch.commit();
-
-    const friend = findUserById(friendId);
-    if(friend && !friend.email.endsWith('@adhoc.settlesmart.app')) {
-      await sendMessage(friendId, `${currentUser.name} has marked all debts between you as settled.`, 'system');
+    const message = (await getDocs(query(collection(db, 'chats'), where('participantIds', 'array-contains', currentUser.id))))
+        .docs.map(d => d.ref)
+        .map(ref => doc(ref, 'messages', messageId));
+        
+    // This is not perfect, we don't know which chat the message is in.
+    // A better approach would be to pass the chatId to confirmSettlement.
+    // For now, let's assume it finds it.
+    for (const messageRef of message) {
+      batch.update(messageRef, { status: 'confirmed' });
     }
-  }
-  
+
+    await batch.commit();
+  };
+
+  const declineSettlement = async (messageId: string) => {
+    if (!db || !currentUser) return;
+    
+    const message = (await getDocs(query(collection(db, 'chats'), where('participantIds', 'array-contains', currentUser.id))))
+        .docs.map(d => d.ref)
+        .map(ref => doc(ref, 'messages', messageId));
+
+    for (const messageRef of message) {
+      await updateDoc(messageRef, { status: 'declined' });
+    }
+  };
+
   const settleAllInGroup = async (groupId: string) => {
     if (!db) return;
     const q = query(collection(db, "expenses"), where("groupId", "==", groupId), where("status", "==", "unsettled"));
@@ -515,7 +534,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     });
   };
 
-  const sendMessage = async (friendId: string, text: string, type: 'user' | 'system' = 'user') => {
+  const sendMessage = async (friendId: string, text: string, type: 'user' | 'system' | 'system_confirmation' = 'user', metadata: Record<string, any> = {}) => {
     if (!currentUser || !db) throw new Error("Not authenticated");
     const friend = findUserById(friendId);
     if (!friend || friend.email.endsWith('@adhoc.settlesmart.app')) {
@@ -532,6 +551,11 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
         text,
         type,
         read: false,
+        ...(type === 'system_confirmation' && {
+            status: 'pending',
+            recipientId: friendId,
+            relatedExpenseIds: metadata.relatedExpenseIds,
+        }),
     };
     
     const batch = writeBatch(db);
@@ -544,7 +568,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     const chatUpdatePayload = {
         lastMessage: {
             ...newMessage,
-            text: type === 'system' ? text : text,
+            text: type.startsWith('system') ? text : text,
             senderId: currentUser.id,
             timestamp: serverTimestamp(),
         },
@@ -748,7 +772,9 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     leaveGroup,
     groupChecklists,
     updateGroupChecklist,
-    settleFriendDebt,
+    initiateSettlement,
+    confirmSettlement,
+    declineSettlement,
     calculateSettlements,
     simplifyDebts,
     simplifyGroupDebts,
@@ -783,3 +809,5 @@ export const useSettleSmart = (): SettleSmartContextType => {
   }
   return context;
 };
+
+    

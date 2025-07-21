@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useEffect, useRef, useTransition, useMemo } from "react";
@@ -9,32 +8,13 @@ import { Header } from "@/components/header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { ArrowLeft, Send, Loader2, Info, History } from "lucide-react";
+import { ArrowLeft, Send, Loader2, Info, HandCoins } from "lucide-react";
 import type { Expense, Message } from "@/lib/types";
 import { cn, formatCurrency } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { format } from "date-fns";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog"
-import { Badge } from "@/components/ui/badge";
+import { useToast } from "@/components/ui/use-toast";
 
 export default function ChatPage() {
   const { friendId: friendIdParam } = useParams();
@@ -47,7 +27,11 @@ export default function ChatPage() {
     sendMessage,
     markMessagesAsRead,
     isAuthLoading,
+    expenses,
+    confirmSettlement,
+    declineSettlement
   } = useSettleSmart();
+  const { toast } = useToast();
   
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -55,6 +39,32 @@ export default function ChatPage() {
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   
   const friend = useMemo(() => findUserById(friendId), [findUserById, friendId]);
+
+  const balanceWithFriend = useMemo(() => {
+    if (!currentUser || !friend) return 0;
+    
+    let balance = 0;
+    expenses.forEach(e => {
+        const isUnsettled1on1 = e.groupId === null && 
+                                e.status === 'unsettled' && 
+                                e.splitWith.length === 2 && 
+                                e.splitWith.includes(currentUser.id) && 
+                                e.splitWith.includes(friend.id);
+
+        if (isUnsettled1on1) {
+            const amountPerPerson = e.amount / 2;
+            if (e.paidById === currentUser.id) {
+                balance -= amountPerPerson; // Friend owes me, so it's a negative balance from their perspective
+            } else {
+                balance += amountPerPerson; // I owe friend
+            }
+        }
+    });
+    // balance > 0 means I owe friend
+    // balance < 0 means friend owes me
+    return balance;
+
+  }, [currentUser, friend, expenses]);
 
   useEffect(() => {
     if (!isAuthLoading && !currentUser) {
@@ -91,13 +101,33 @@ export default function ChatPage() {
 
     startSendingTransition(async () => {
       try {
-        await sendMessage(friendId, input, 'user');
+        await sendMessage(friendId, input);
         setInput("");
       } catch (error) {
         console.error("Failed to send message", error);
       }
     });
   };
+
+  const handleRemind = async () => {
+    if (!friend) return;
+    const amountOwed = formatCurrency(Math.abs(balanceWithFriend));
+    await sendMessage(friend.id, `Just a friendly nudge! Looks like you owe me ${amountOwed}. No rush, just a reminder!`, 'system');
+    toast({ title: "Reminder Sent!", description: `A gentle nudge has been sent to ${friend.name}.` });
+  };
+  
+  const handleConfirm = async (message: Message) => {
+    if (!message.relatedExpenseIds) return;
+    await confirmSettlement(message.relatedExpenseIds, message.id);
+    toast({ title: "Settled!", description: "The transaction has been confirmed and marked as paid." });
+  }
+
+  const handleDecline = async (message: Message) => {
+      if (!message.relatedExpenseIds) return;
+      await declineSettlement(message.id);
+      toast({ variant: "destructive", title: "Settlement Declined", description: "You've marked that the payment was not received." });
+  }
+
 
   if (isAuthLoading || !currentUser || !friend) {
     return (
@@ -106,6 +136,8 @@ export default function ChatPage() {
       </div>
     );
   }
+  
+  const friendOwesMe = balanceWithFriend < -0.01;
 
   return (
     <div className="flex flex-col min-h-screen w-full">
@@ -122,6 +154,13 @@ export default function ChatPage() {
                 </Avatar>
                 <h1 className="text-xl font-bold">{friend.name}</h1>
             </div>
+            <div className="flex-1" />
+            {friendOwesMe && (
+                <Button variant="outline" size="sm" onClick={handleRemind}>
+                    <HandCoins className="h-4 w-4 mr-2" />
+                    Remind to Pay
+                </Button>
+            )}
         </div>
         <Card className="flex-1 flex flex-col p-0">
           <ScrollArea className="flex-1" ref={scrollAreaRef}>
@@ -131,10 +170,26 @@ export default function ChatPage() {
                 const isCurrentUser = message.senderId === currentUser.id;
                 const sender = isCurrentUser ? currentUser : friend;
 
-                if (message.type === 'system') {
+                if (message.type?.startsWith('system')) {
+                    const isConfirmation = message.type === 'system_confirmation';
+                    const isAwaitingConfirmation = isConfirmation && message.status === 'pending';
+                    const isConfirmationForCurrentUser = isConfirmation && message.recipientId === currentUser.id;
+                    const isConfirmed = message.status === 'confirmed';
+                    const isDeclined = message.status === 'declined';
+
                     return (
-                        <div key={message.id} className="flex items-center justify-center gap-2 text-xs text-muted-foreground my-2">
-                           <Info className="h-3 w-3" /> <span>{message.text}</span>
+                        <div key={message.id} className="flex flex-col items-center justify-center gap-2 text-xs text-muted-foreground my-2">
+                           <div className="flex items-center gap-2">
+                             <Info className="h-3 w-3" /> <span>{message.text}</span>
+                           </div>
+                            {isAwaitingConfirmation && isConfirmationForCurrentUser && (
+                                <div className="flex gap-2 mt-1">
+                                    <Button size="sm" onClick={() => handleConfirm(message)}>Yes, I got it</Button>
+                                    <Button size="sm" variant="destructive" onClick={() => handleDecline(message)}>No, not yet</Button>
+                                </div>
+                            )}
+                            {isConfirmed && <Badge variant="secondary">Payment Confirmed</Badge>}
+                            {isDeclined && <Badge variant="destructive">Payment Declined</Badge>}
                         </div>
                     )
                 }
@@ -202,3 +257,5 @@ export default function ChatPage() {
     </div>
   );
 }
+
+    
