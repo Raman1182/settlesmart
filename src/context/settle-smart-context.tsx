@@ -178,6 +178,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     };
     appDataStore.users.push(newUserRecord);
     setUsers([...appDataStore.users]);
+    await setDoc(doc(db, "users", result.user.uid), { email: newUserRecord.email, name: newUserRecord.name, avatar: newUserRecord.avatar, initials: newUserRecord.initials });
     return result;
   }
 
@@ -198,8 +199,20 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     const existing = friendships.find(f => f.userIds.includes(toUser.id) && f.userIds.includes(currentUser.id));
     if (existing) throw new Error("You are already friends or a request is pending.");
     
+    // The flow now just returns a status, the context handles the state.
     await sendFriendRequestFlow({ fromUserId: currentUser.id, toUserEmail: email });
     
+    const newFriendship: Friendship = {
+        id: `fr-${Date.now()}`,
+        userIds: [currentUser.id, toUser.id],
+        status: 'pending',
+        requestedBy: currentUser.id,
+    };
+
+    appDataStore.friendships.push(newFriendship);
+    setFriendships([...appDataStore.friendships]);
+    
+    // Simulate Firestore by adding it there as well
     const friendshipsRef = collection(db, 'friendships');
     await addDoc(friendshipsRef, {
         userIds: [currentUser.id, toUser.id],
