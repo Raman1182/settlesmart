@@ -11,6 +11,7 @@ import {
   Loader2,
   Plus,
   Settings,
+  Sparkles,
   User,
   Users,
 } from "lucide-react";
@@ -113,6 +114,10 @@ export function CommandMenu() {
              <CommandItem onSelect={() => runCommand(() => router.push('/insights'))}>
               <LineChart className="mr-2 h-4 w-4" />
               <span>Insights</span>
+            </CommandItem>
+             <CommandItem onSelect={() => runCommand(() => router.push('/assistant'))}>
+              <Sparkles className="mr-2 h-4 w-4" />
+              <span>Smart Assistant</span>
             </CommandItem>
           </CommandGroup>
            <CommandGroup heading="Actions">

@@ -3,7 +3,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Users, Plus, User as UserIcon, LineChart } from "lucide-react";
+import { Home, Users, Plus, User as UserIcon, LineChart, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AddExpenseSheet } from "./add-expense-sheet";
 import { Button } from "./ui/button";
@@ -16,7 +16,7 @@ export function BottomNavbar() {
     { href: "/groups", label: "Groups", icon: Users },
     { href: "#", label: "Add", icon: Plus, isAction: true },
     { href: "/friends", label: "Friends", icon: UserIcon },
-    { href: "/insights", label: "Insights", icon: LineChart },
+    { href: "/assistant", label: "Assistant", icon: Sparkles },
   ];
 
   return (
