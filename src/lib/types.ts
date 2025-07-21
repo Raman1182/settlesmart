@@ -51,9 +51,16 @@ export interface ChecklistItem {
 
 export interface Message {
   id: string;
+  chatId: string;
   senderId: string;
-  receiverId: string;
   text: string;
   read: boolean;
   createdAt: string;
+}
+
+export interface Friendship {
+    id: string;
+    userIds: string[];
+    status: 'pending' | 'accepted' | 'rejected';
+    requestedBy: string;
 }

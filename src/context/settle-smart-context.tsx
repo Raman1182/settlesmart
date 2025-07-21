@@ -4,9 +4,10 @@
 import React, { createContext, useContext, useState, useMemo, useCallback, useEffect } from "react";
 import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged, User as FirebaseUser, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut } from "firebase/auth";
-import { collection, addDoc, query, where, onSnapshot, doc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { collection, addDoc, query, where, onSnapshot, doc, updateDoc, serverTimestamp, getDocs, orderBy } from "firebase/firestore";
+import { sendFriendRequest, respondToFriendRequest } from "@/ai/flows/friend-request-flow";
 
-import type { User, Group, Expense, Participant, UnequalSplit, ChecklistItem, Message } from "@/lib/types";
+import type { User, Group, Expense, Participant, UnequalSplit, ChecklistItem, Message, Friendship } from "@/lib/types";
 import { users as mockUsers, groups as mockGroups, expenses as mockExpenses } from '@/lib/data';
 
 interface AddExpenseData {
@@ -28,6 +29,7 @@ interface SettleSmartContextType {
   groups: Group[];
   expenses: Expense[];
   messages: Message[];
+  friendships: Friendship[];
   addExpense: (expense: AddExpenseData) => void;
   balances: {
     totalOwedToUser: number;
@@ -54,6 +56,10 @@ interface SettleSmartContextType {
   signUp: (email: string, pass: string) => Promise<any>;
   signIn: (email: string, pass: string) => Promise<any>;
   signOut: () => Promise<void>;
+  sendFriendRequest: (email: string) => Promise<void>;
+  acceptFriendRequest: (friendshipId: string) => Promise<void>;
+  rejectFriendRequest: (friendshipId: string) => Promise<void>;
+  getChatMessages: (friendId: string, callback: (messages: Message[]) => void) => () => void;
   sendMessage: (receiverId: string, text: string) => Promise<void>;
   markMessageAsRead: (messageId: string) => Promise<void>;
   addAdHocUser: (email: string) => void;
@@ -79,30 +85,39 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const [expenses, setExpenses] = useState<Expense[]>(appDataStore.expenses.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
   const [groupChecklists, setGroupChecklists] = useState<{ [groupId: string]: ChecklistItem[] }>(appDataStore.groupChecklists);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [friendships, setFriendships] = useState<Friendship[]>([]);
+
 
   useEffect(() => {
-    const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
         if (user) {
-            let existingUser = appDataStore.users.find(u => u.id === user.uid || u.email === user.email);
-            if (existingUser) {
-              // Ensure user has firebase uid
-              if (existingUser.id !== user.uid) {
-                existingUser.id = user.uid;
-              }
-              setCurrentUser(existingUser);
+            // Add user to 'users' collection in Firestore if not exists
+            const userRef = doc(db, "users", user.uid);
+            const userDoc = await getDocs(query(collection(db, "users"), where("email", "==", user.email)));
+            let userId = user.uid;
+            
+            if (userDoc.empty) {
+                 const newUserEntry = {
+                    email: user.email!,
+                    name: user.email!.split('@')[0],
+                    avatar: `https://placehold.co/100x100?text=${user.email!.charAt(0).toUpperCase()}`,
+                    initials: user.email!.charAt(0).toUpperCase(),
+                 };
+                 await addDoc(collection(db, "users"), newUserEntry);
+                 userId = (await getDocs(query(collection(db, "users"), where("email", "==", user.email)))).docs[0].id;
+
             } else {
-              const newUser: User = {
-                id: user.uid,
-                email: user.email!,
-                name: user.email!.split('@')[0],
-                avatar: `https://placehold.co/100x100?text=${user.email!.charAt(0).toUpperCase()}`,
-                initials: user.email!.charAt(0).toUpperCase(),
-              };
-              appDataStore.users.push(newUser);
-              setCurrentUser(newUser);
+                 userId = userDoc.docs[0].id;
             }
-            // Always refresh users from the "global" store on auth change
-            setUsers([...appDataStore.users]);
+
+            const currentUserData: User = { id: userId, ...userDoc.docs[0].data() } as User;
+            setCurrentUser(currentUserData);
+            
+            // Sync all users from Firestore to local state
+            const usersSnapshot = await getDocs(collection(db, "users"));
+            const allUsers = usersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
+            setUsers(allUsers);
+
         } else {
             setCurrentUser(null);
         }
@@ -115,11 +130,13 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   useEffect(() => {
     if (!currentUser) {
         setMessages([]);
+        setFriendships([]);
         return;
     };
 
-    const q = query(collection(db, "messages"), where("receiverId", "==", currentUser.id));
-    const unsubscribeMessages = onSnapshot(q, (querySnapshot) => {
+    // Listener for all messages where current user is sender or receiver
+    const qMessages = query(collection(db, "messages"), where("chatId", "array-contains", currentUser.id));
+    const unsubscribeMessages = onSnapshot(qMessages, (querySnapshot) => {
         const receivedMessages: Message[] = [];
         querySnapshot.forEach((doc) => {
             const data = doc.data();
@@ -129,19 +146,28 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
                 createdAt: data.createdAt?.toDate().toISOString() || new Date().toISOString()
             } as Message);
         });
-        setMessages(receivedMessages.sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+        setMessages(receivedMessages.sort((a,b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()));
     });
     
-    return () => unsubscribeMessages();
+    // Listener for friendships
+    const qFriendships = query(collection(db, "friendships"), where("userIds", "array-contains", currentUser.id));
+    const unsubscribeFriendships = onSnapshot(qFriendships, (querySnapshot) => {
+        const userFriendships: Friendship[] = [];
+        querySnapshot.forEach((doc) => {
+            userFriendships.push({ id: doc.id, ...doc.data()} as Friendship);
+        });
+        setFriendships(userFriendships);
+    });
+    
+    return () => {
+        unsubscribeMessages();
+        unsubscribeFriendships();
+    };
   }, [currentUser]);
 
 
   const signUp = async (email: string, pass: string) => {
     const result = await createUserWithEmailAndPassword(auth, email, pass);
-    // After signup, a new user is created in Firebase Auth.
-    // The onAuthStateChanged listener will fire, creating the user in our mock store.
-    // We explicitly set the user list state again here to ensure all components re-render with the new user.
-    setUsers([...appDataStore.users]); 
     return result;
   }
 
@@ -153,11 +179,51 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     return firebaseSignOut(auth);
   }
 
+  const sendFriendRequest = async (email: string) => {
+    if (!currentUser) throw new Error("Not authenticated");
+    await sendFriendRequest({ fromUserId: currentUser.id, toUserEmail: email });
+  }
+
+  const acceptFriendRequest = async (friendshipId: string) => {
+    await respondToFriendRequest({ friendshipId, response: 'accepted' });
+  }
+
+  const rejectFriendRequest = async (friendshipId: string) => {
+     await respondToFriendRequest({ friendshipId, response: 'rejected' });
+  }
+  
+   const getChatMessages = (friendId: string, callback: (messages: Message[]) => void) => {
+    if (!currentUser) return () => {};
+
+    const chatId = [currentUser.id, friendId].sort().join('_');
+    const q = query(
+      collection(db, 'messages'),
+      where('chatId', '==', chatId),
+      orderBy('createdAt', 'asc')
+    );
+
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+      const chatMessages: Message[] = [];
+      querySnapshot.forEach((doc) => {
+        const data = doc.data();
+        chatMessages.push({
+          id: doc.id,
+          ...data,
+          createdAt: data.createdAt?.toDate().toISOString() || new Date().toISOString(),
+        } as Message);
+      });
+      callback(chatMessages);
+    });
+
+    return unsubscribe;
+  };
+
   const sendMessage = async (receiverId: string, text: string) => {
     if (!currentUser) throw new Error("Not authenticated");
+    const chatId = [currentUser.id, receiverId].sort().join('_');
     await addDoc(collection(db, "messages"), {
+      chatId,
       senderId: currentUser.id,
-      receiverId,
       text,
       read: false,
       createdAt: serverTimestamp()
@@ -184,7 +250,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   };
   
   const addAdHocUser = (email: string) => {
-    if (appDataStore.users.some(u => u.email === email)) {
+    if (users.some(u => u.email === email)) {
         throw new Error("User with this email already exists.");
     }
     const newUser: User = {
@@ -194,8 +260,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
         avatar: `https://placehold.co/100x100?text=${email.charAt(0).toUpperCase()}`,
         initials: email.charAt(0).toUpperCase(),
     };
-    appDataStore.users.push(newUser);
-    setUsers([...appDataStore.users]);
+    setUsers(prev => [...prev, newUser]);
   }
 
   const createGroup = async (name: string, memberEmails: string[]) => {
@@ -203,7 +268,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
       const memberIds = new Set<string>([currentUser.id]);
       
       memberEmails.forEach(email => {
-        let user = appDataStore.users.find(u => u.email === email);
+        let user = users.find(u => u.email === email);
         if (user) {
           memberIds.add(user.id);
         } else {
@@ -212,12 +277,11 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
           const newUser: User = {
             id: newId,
             name: email.split('@')[0],
-            email: email, // We can store the email to potentially link later
+            email: email, 
             avatar: `https://placehold.co/100x100?text=${email.charAt(0).toUpperCase()}`,
             initials: email.charAt(0).toUpperCase(),
           };
-          appDataStore.users.push(newUser);
-          setUsers([...appDataStore.users]);
+          setUsers(prev => [...prev, newUser]);
           memberIds.add(newId);
         }
       });
@@ -230,58 +294,52 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
         createdAt: new Date().toISOString(),
       };
       
-      appDataStore.groups.push(newGroup);
-      setGroups([...appDataStore.groups]);
+      setGroups(prev => [...prev, newGroup]);
   };
 
   const updateGroupMembers = async (groupId: string, memberEmailsToAdd: string[], memberIdsToRemove: string[]) => {
       const membersToAddIds = users.filter(u => memberEmailsToAdd.includes(u.email)).map(u => u.id);
       
-      const groupIndex = appDataStore.groups.findIndex(g => g.id === groupId);
+      const groupIndex = groups.findIndex(g => g.id === groupId);
       if (groupIndex > -1) {
-          const newMembers = new Set(appDataStore.groups[groupIndex].members);
+          const newMembers = new Set(groups[groupIndex].members);
           membersToAddIds.forEach(id => newMembers.add(id));
           memberIdsToRemove.forEach(id => newMembers.delete(id));
-          appDataStore.groups[groupIndex].members = Array.from(newMembers);
-          setGroups([...appDataStore.groups]);
+          const updatedGroups = [...groups];
+          updatedGroups[groupIndex].members = Array.from(newMembers);
+          setGroups(updatedGroups);
       }
   };
   
   const deleteGroup = async (groupId: string) => {
-    appDataStore.groups = appDataStore.groups.filter(g => g.id !== groupId);
-    appDataStore.expenses = appDataStore.expenses.filter(e => e.groupId !== groupId);
-    setGroups(appDataStore.groups);
-    setExpenses(appDataStore.expenses);
+    setGroups(prev => prev.filter(g => g.id !== groupId));
+    setExpenses(prev => prev.filter(e => e.groupId !== groupId));
   };
   
   const leaveGroup = async (groupId: string) => {
      if (!currentUser) throw new Error("Not authenticated");
-     const groupIndex = appDataStore.groups.findIndex(g => g.id === groupId);
+     const groupIndex = groups.findIndex(g => g.id === groupId);
       if (groupIndex > -1) {
-          appDataStore.groups[groupIndex].members = appDataStore.groups[groupIndex].members.filter(mId => mId !== currentUser.id);
-          setGroups([...appDataStore.groups]);
+          const updatedGroups = [...groups];
+          updatedGroups[groupIndex].members = updatedGroups[groupIndex].members.filter(mId => mId !== currentUser.id);
+          setGroups(updatedGroups);
       }
   };
   
   const updateGroupChecklist = (groupId: string, items: ChecklistItem[]) => {
-    appDataStore.groupChecklists[groupId] = items;
-    setGroupChecklists({...appDataStore.groupChecklists});
+    setGroupChecklists(prev => ({ ...prev, [groupId]: items}));
   };
   
   const settleFriendDebt = async (friendId: string) => {
     if (!currentUser) throw new Error("Not authenticated");
-    const expensesToRemove = appDataStore.expenses.filter(e => {
+    setExpenses(prev => prev.filter(e => {
         const participants = new Set(e.splitWith);
-        return participants.size === 2 && participants.has(currentUser.id) && participants.has(friendId);
-    });
-
-    appDataStore.expenses = appDataStore.expenses.filter(e => !expensesToRemove.some(er => er.id === e.id));
-    setExpenses(appDataStore.expenses);
+        return !(participants.size === 2 && participants.has(currentUser.id) && participants.has(friendId));
+    }));
   }
   
   const settleAllInGroup = (groupId: string) => {
-    appDataStore.expenses = appDataStore.expenses.filter(e => e.groupId !== groupId);
-    setExpenses(appDataStore.expenses);
+    setExpenses(prev => prev.filter(e => e.groupId !== groupId));
   };
 
   const calculateSettlements = useCallback((expensesToCalculate: Expense[], allParticipants: Participant[]) => {
@@ -410,6 +468,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     groups,
     expenses,
     messages,
+    friendships,
     addExpense,
     balances,
     getGroupBalances,
@@ -426,6 +485,10 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     signUp,
     signIn,
     signOut,
+    sendFriendRequest,
+    acceptFriendRequest,
+    rejectFriendRequest,
+    getChatMessages,
     sendMessage,
     markMessageAsRead,
     addAdHocUser,

@@ -15,8 +15,11 @@ interface HeaderProps {
 }
 
 export function Header({ pageTitle = "Dashboard" }: HeaderProps) {
-    const { messages, findUserById, markMessageAsRead } = useSettleSmart();
-    const unreadCount = messages.filter(m => !m.read).length;
+    const { messages, findUserById, markMessageAsRead, currentUser } = useSettleSmart();
+    
+    // Filter messages for the current user that are not from the current user
+    const relevantMessages = messages.filter(m => m.chatId.includes(currentUser?.id || '') && m.senderId !== currentUser?.id);
+    const unreadCount = relevantMessages.filter(m => !m.read).length;
 
     return (
         <header className="flex h-16 items-center gap-4 border-b bg-background/95 backdrop-blur-sm px-4 lg:px-6 sticky top-0 z-30">
@@ -44,8 +47,8 @@ export function Header({ pageTitle = "Dashboard" }: HeaderProps) {
                 <DropdownMenuContent align="end" className="w-80">
                     <DropdownMenuLabel>Notifications</DropdownMenuLabel>
                     <DropdownMenuSeparator />
-                    {messages.length === 0 && <DropdownMenuItem disabled>No new messages</DropdownMenuItem>}
-                    {messages.map(message => {
+                    {relevantMessages.length === 0 && <DropdownMenuItem disabled>No new messages</DropdownMenuItem>}
+                    {relevantMessages.slice(0, 5).map(message => {
                         const sender = findUserById(message.senderId);
                         return (
                             <DropdownMenuItem key={message.id} onSelect={() => markMessageAsRead(message.id)}>
