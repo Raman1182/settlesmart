@@ -51,7 +51,7 @@ export interface ChecklistItem {
 
 export interface Message {
   id: string;
-  chatId: string;
+  chatId: string | string[]; // Can be array from firestore or joined string
   senderId: string;
   text: string;
   read: boolean;

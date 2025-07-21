@@ -12,10 +12,11 @@ import { Loader2, Send, ArrowLeft } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import type { Message } from '@/lib/types';
+import { format } from 'date-fns';
 
 export default function ChatPage() {
   const { friendId } = useParams() as { friendId: string };
-  const { currentUser, findUserById, getChatMessages, sendMessage, isLoading } = useSettleSmart();
+  const { currentUser, findUserById, getChatMessages, sendMessage, isLoading, friendships } = useSettleSmart();
   const router = useRouter();
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
@@ -23,10 +24,11 @@ export default function ChatPage() {
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
   const friend = findUserById(friendId);
+  const isFriend = friendships.some(f => f.status === 'accepted' && f.userIds.includes(friendId));
 
   useEffect(() => {
     if (isLoading || !currentUser) return;
-    if (!friend) {
+    if (!friend || !isFriend) {
       router.replace('/friends');
       return;
     }
@@ -35,16 +37,18 @@ export default function ChatPage() {
       setMessages(chatMessages);
     });
 
-    return () => unsubscribe();
-  }, [friendId, currentUser, isLoading, friend, router, getChatMessages]);
+    return () => {
+        if(unsubscribe) unsubscribe();
+    };
+  }, [friendId, currentUser, isLoading, friend, router, getChatMessages, isFriend]);
 
   useEffect(() => {
     // Scroll to bottom when new messages arrive
-    if (scrollAreaRef.current) {
-        const viewport = scrollAreaRef.current?.querySelector('[data-radix-scroll-area-viewport]');
-        if (viewport) {
-             viewport.scrollTop = viewport.scrollHeight;
-        }
+    const viewport = scrollAreaRef.current?.querySelector('[data-radix-scroll-area-viewport]');
+    if (viewport) {
+         setTimeout(() => {
+            viewport.scrollTop = viewport.scrollHeight;
+         }, 100)
     }
   }, [messages]);
 
@@ -74,47 +78,60 @@ export default function ChatPage() {
 
   return (
     <div className="flex flex-col h-screen w-full">
-      <Header pageTitle={`Chat with ${friend.name}`} />
-      <div className="flex items-center gap-4 border-b p-4">
-        <Button variant="ghost" size="icon" onClick={() => router.back()}>
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
-        <Avatar>
-          <AvatarImage src={friend.avatar} alt={friend.name} />
-          <AvatarFallback>{friend.initials}</AvatarFallback>
-        </Avatar>
-        <h2 className="text-lg font-semibold">{friend.name}</h2>
-      </div>
+       <Header pageTitle="" />
+       <div className="flex items-center gap-4 border-b p-2 md:p-4 sticky top-16 bg-background z-10">
+            <Button variant="ghost" size="icon" onClick={() => router.back()}>
+            <ArrowLeft className="h-5 w-5" />
+            </Button>
+            <Avatar>
+            <AvatarImage src={friend.avatar} alt={friend.name} />
+            <AvatarFallback>{friend.initials}</AvatarFallback>
+            </Avatar>
+            <h2 className="text-lg font-semibold">{friend.name}</h2>
+       </div>
+
       <main className="flex-1 flex flex-col">
         <ScrollArea className="flex-1 p-4" ref={scrollAreaRef}>
-          <div className="space-y-4">
-            {messages.map((message) => (
-              <div
-                key={message.id}
-                className={cn(
-                  'flex items-end gap-2 max-w-xs',
-                  message.senderId === currentUser.id ? 'ml-auto flex-row-reverse' : 'mr-auto'
-                )}
-              >
-                <Avatar className="h-8 w-8">
-                   <AvatarImage src={message.senderId === currentUser.id ? currentUser.avatar : friend.avatar} />
-                   <AvatarFallback>{message.senderId === currentUser.id ? currentUser.initials : friend.initials}</AvatarFallback>
-                </Avatar>
-                <div
-                  className={cn(
-                    'rounded-lg px-3 py-2 text-sm',
-                    message.senderId === currentUser.id
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-muted'
-                  )}
-                >
-                  {message.text}
-                </div>
-              </div>
-            ))}
+          <div className="space-y-6">
+            {messages.map((message, index) => {
+                 const showAvatar = index === messages.length - 1 || messages[index + 1]?.senderId !== message.senderId;
+                 const sender = message.senderId === currentUser.id ? currentUser : friend;
+                 
+                 return (
+                    <div
+                        key={message.id}
+                        className={cn(
+                        'flex items-end gap-2',
+                        message.senderId === currentUser.id ? 'ml-auto flex-row-reverse' : 'mr-auto'
+                        )}
+                    >
+                       <div className="w-8">
+                         {showAvatar && (
+                             <Avatar className="h-8 w-8">
+                                <AvatarImage src={sender.avatar} />
+                                <AvatarFallback>{sender.initials}</AvatarFallback>
+                             </Avatar>
+                         )}
+                       </div>
+                        <div
+                        className={cn(
+                            'rounded-lg px-3 py-2 text-sm max-w-xs md:max-w-md whitespace-pre-wrap',
+                            message.senderId === currentUser.id
+                            ? 'bg-primary text-primary-foreground'
+                            : 'bg-muted'
+                        )}
+                        >
+                        <p>{message.text}</p>
+                         <p className={cn("text-xs mt-1", message.senderId === currentUser.id ? 'text-primary-foreground/70' : 'text-muted-foreground/70')}>
+                           {format(new Date(message.createdAt), 'h:mm a')}
+                         </p>
+                        </div>
+                    </div>
+                )
+            })}
           </div>
         </ScrollArea>
-        <div className="p-4 border-t bg-background">
+        <div className="p-4 border-t bg-background sticky bottom-0">
           <form onSubmit={handleSendMessage} className="flex items-center gap-2">
             <Input
               value={newMessage}

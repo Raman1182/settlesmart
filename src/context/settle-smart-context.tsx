@@ -4,7 +4,7 @@
 import React, { createContext, useContext, useState, useMemo, useCallback, useEffect } from "react";
 import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged, User as FirebaseUser, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut } from "firebase/auth";
-import { collection, addDoc, query, where, onSnapshot, doc, updateDoc, serverTimestamp, getDocs, orderBy, deleteDoc } from "firebase/firestore";
+import { collection, addDoc, query, where, onSnapshot, doc, updateDoc, serverTimestamp, getDocs, orderBy, deleteDoc, getDoc } from "firebase/firestore";
 import { sendFriendRequest, respondToFriendRequest } from "@/ai/flows/friend-request-flow";
 
 import type { User, Group, Expense, Participant, UnequalSplit, ChecklistItem, Message, Friendship } from "@/lib/types";
@@ -91,20 +91,24 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
         if (user) {
-            let userRecord = users.find(u => u.email === user.email);
-            if (!userRecord) {
+            const userRef = doc(db, 'users', user.uid);
+            const userDoc = await getDoc(userRef);
+            if (userDoc.exists()) {
+                setCurrentUser({ id: user.uid, ...userDoc.data() } as User);
+            } else {
                 // If user doesn't exist in our mock data, create them
-                userRecord = {
+                const newUserRecord: User = {
                     id: user.uid,
                     email: user.email!,
                     name: user.email!.split('@')[0],
                     avatar: `https://placehold.co/100x100?text=${user.email!.charAt(0).toUpperCase()}`,
                     initials: user.email!.charAt(0).toUpperCase(),
                 };
-                setUsers(prev => [...prev, userRecord!]);
-                appDataStore.users.push(userRecord);
+                // await setDoc(userRef, newUserRecord); // This would be for a pure firestore app
+                appDataStore.users.push(newUserRecord);
+                setUsers(prev => [...prev, newUserRecord!]);
+                setCurrentUser(newUserRecord);
             }
-            setCurrentUser(userRecord);
         } else {
             setCurrentUser(null);
         }
@@ -112,40 +116,19 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     });
 
     return () => unsubscribeAuth();
-  }, [users]); // Depend on users array to re-run if it changes
+  }, []);
 
   useEffect(() => {
-    if (!currentUser) {
+    if (!currentUser?.id) {
         setMessages([]);
         setFriendships([]);
         return;
     };
-
-    const chatsQuery = query(collection(db, 'chats'));
-    const unsubscribeChats = onSnapshot(chatsQuery, (snapshot) => {
-        const userChatIds: string[] = [];
-        snapshot.forEach(doc => {
-            if(doc.data().members.includes(currentUser.id)) {
-                userChatIds.push(doc.id);
-            }
-        });
-
-        if (userChatIds.length > 0) {
-            const messagesQuery = query(collection(db, 'messages'), where('chatId', 'in', userChatIds));
-            const unsubscribeMessages = onSnapshot(messagesQuery, (msgSnapshot) => {
-                 const receivedMessages: Message[] = msgSnapshot.docs.map(doc => ({
-                    id: doc.id,
-                    ...doc.data(),
-                    createdAt: doc.data().createdAt?.toDate().toISOString() || new Date().toISOString()
-                 } as Message));
-                 setMessages(receivedMessages.sort((a,b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()));
-            });
-            return () => unsubscribeMessages();
-        }
-    });
     
+    const currentUserId = currentUser.id;
+
     // Listener for friendships
-    const qFriendships = query(collection(db, "friendships"), where("userIds", "array-contains", currentUser.id));
+    const qFriendships = query(collection(db, "friendships"), where("userIds", "array-contains", currentUserId));
     const unsubscribeFriendships = onSnapshot(qFriendships, (querySnapshot) => {
         const userFriendships: Friendship[] = [];
         querySnapshot.forEach((doc) => {
@@ -153,12 +136,27 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
         });
         setFriendships(userFriendships);
     });
+
+    // Listener for messages
+    const qMessages = query(collection(db, "messages"), where("chatId", "array-contains", currentUserId));
+    const unsubscribeMessages = onSnapshot(qMessages, (msgSnapshot) => {
+          const receivedMessages: Message[] = msgSnapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+                id: doc.id,
+                ...data,
+                chatId: data.chatId.join('_'), // Rejoin for consistency in the app
+                createdAt: data.createdAt?.toDate().toISOString() || new Date().toISOString()
+            } as Message
+          });
+          setMessages(receivedMessages.sort((a,b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()));
+    });
     
     return () => {
-        unsubscribeChats();
         unsubscribeFriendships();
+        unsubscribeMessages();
     };
-  }, [currentUser]);
+  }, [currentUser?.id]);
 
 
   const signUp = async (email: string, pass: string) => {
@@ -170,6 +168,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
         avatar: `https://placehold.co/100x100?text=${email.charAt(0).toUpperCase()}`,
         initials: email.charAt(0).toUpperCase(),
     };
+    // await setDoc(doc(db, "users", result.user.uid), newUserRecord);
     appDataStore.users.push(newUserRecord);
     setUsers([...appDataStore.users]);
     return result;
@@ -201,44 +200,36 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     if (!currentUser) return () => {};
 
     const chatId = [currentUser.id, friendId].sort().join('_');
-    const q = query(
-      collection(db, 'messages'),
-      where('chatId', '==', chatId),
-      orderBy('createdAt', 'asc')
-    );
-
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
-      const chatMessages: Message[] = [];
-      querySnapshot.forEach((doc) => {
-        const data = doc.data();
-        chatMessages.push({
-          id: doc.id,
-          ...data,
-          createdAt: data.createdAt?.toDate().toISOString() || new Date().toISOString(),
-        } as Message);
-      });
-      callback(chatMessages);
+    const relevantMessages = messages.filter(m => m.chatId === chatId);
+    callback(relevantMessages);
+    
+    const unsubscribe = onSnapshot(query(collection(db, "messages")), () => {
+        // This is a bit of a hack to re-run the filter when any message changes.
+        // A more optimized approach would listen to a specific chat query.
+        const updatedMessages = messages.filter(m => m.chatId === chatId);
+        callback(updatedMessages)
     });
-
+    
     return unsubscribe;
   };
 
   const sendMessage = async (receiverId: string, text: string) => {
     if (!currentUser) throw new Error("Not authenticated");
-    const chatId = [currentUser.id, receiverId].sort().join('_');
+    const chatId = [currentUser.id, receiverId].sort();
     
     // Check if chat exists, if not create it
-    const chatRef = doc(db, 'chats', chatId);
-    const chatDoc = await getDocs(query(collection(db, 'chats'), where('__name__', '==', chatId)));
-    if(chatDoc.empty) {
-        await addDoc(collection(db, 'chats'), {
-            id: chatId,
-            members: [currentUser.id, receiverId]
-        });
+    const chatRef = doc(db, 'chats', chatId.join('_'));
+    const chatDoc = await getDoc(chatRef);
+
+    if(!chatDoc.exists()) {
+       await addDoc(collection(db, "chats"), {
+         id: chatId.join('_'),
+         members: chatId,
+       });
     }
 
     await addDoc(collection(db, "messages"), {
-      chatId,
+      chatId: chatId, // Store as an array for querying
       senderId: currentUser.id,
       text,
       read: false,
@@ -251,7 +242,21 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     await updateDoc(messageRef, { read: true });
   }
 
-  const findUserById = useCallback((id: string) => users.find(u => u.id === id), [users]);
+  const findUserById = useCallback((id: string) => {
+      let user = users.find(u => u.id === id);
+      if (!user) {
+          // Fallback for ad-hoc users who might not be in the main list yet
+          return {
+              id,
+              name: 'Unknown User',
+              email: '',
+              avatar: 'https://placehold.co/100x100.png',
+              initials: '?'
+          }
+      }
+      return user;
+  }, [users]);
+
 
   const addExpense = (expenseData: AddExpenseData) => {
      if (!currentUser) throw new Error("No user found");
@@ -281,25 +286,15 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
   const createGroup = async (name: string, memberEmails: string[]) => {
       if (!currentUser) throw new Error("Not authenticated");
+      
       const memberIds = new Set<string>([currentUser.id]);
       
-      memberEmails.forEach(email => {
-        let user = users.find(u => u.email === email);
-        if (user) {
-          memberIds.add(user.id);
-        } else {
-          // This logic is for ad-hoc (non-registered) members
-          const newId = `user-${new Date().getTime()}-${Math.random()}`;
-          const newUser: User = {
-            id: newId,
-            name: email.split('@')[0],
-            email: email, 
-            avatar: `https://placehold.co/100x100?text=${email.charAt(0).toUpperCase()}`,
-            initials: email.charAt(0).toUpperCase(),
-          };
-          setUsers(prev => [...prev, newUser]);
-          memberIds.add(newId);
-        }
+      // Query firestore for existing users by email
+      const usersRef = collection(db, 'users');
+      const q = query(usersRef, where('email', 'in', memberEmails));
+      const querySnapshot = await getDocs(q);
+      querySnapshot.forEach((doc) => {
+        memberIds.add(doc.id);
       });
       
       const newGroup: Group = {
