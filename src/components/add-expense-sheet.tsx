@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useTransition, useEffect } from "react";
+import { useState, useTransition, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -88,19 +88,21 @@ export function AddExpenseSheet({ children, open, onOpenChange }: AddExpenseShee
     startParsingTransition(async () => {
       try {
         const result = await parseExpense({ naturalLanguageInput: nlInput });
-        if (result) {
+        if (result && currentUser) {
           form.setValue("description", result.description);
           form.setValue("amount", result.amount);
           
           const participantNames = result.participants.map(p => p.toLowerCase());
-          const participantIds = users
-            .filter(u => participantNames.includes(u.name.toLowerCase()) || (u.id === currentUser.id && participantNames.includes('you')))
-            .map(u => u.id);
           
-          if(currentUser && !participantIds.includes(currentUser.id)) {
+          const participantIds = users
+            .filter(u => participantNames.includes(u.name.toLowerCase()) || (participantNames.includes('you') && u.id === currentUser.id) )
+            .map(u => u.id);
+
+          // Ensure current user is included if "me" or "I" was parsed as "you"
+          if (participantNames.includes('you') && !participantIds.includes(currentUser.id)) {
             participantIds.push(currentUser.id);
           }
-
+          
           form.setValue("splitWith", participantIds);
 
           toast({
@@ -142,7 +144,21 @@ export function AddExpenseSheet({ children, open, onOpenChange }: AddExpenseShee
   };
   
   const selectedGroupId = form.watch("groupId");
-  const membersOfSelectedGroup = groups.find(g => g.id === selectedGroupId)?.members.map(id => findUserById(id)).filter(Boolean) as User[] || [];
+  const splitWithIds = form.watch("splitWith");
+
+  const membersOfSelectedGroup = useMemo(() => {
+    if (!selectedGroupId) return [];
+    return groups.find(g => g.id === selectedGroupId)?.members.map(id => findUserById(id)).filter(Boolean) as User[] || [];
+  }, [groups, selectedGroupId, findUserById]);
+  
+  const participantsToDisplay = useMemo(() => {
+    if (selectedGroupId) {
+      return membersOfSelectedGroup;
+    }
+    // If no group is selected, show the users that have been selected via AI parsing
+    return users.filter(u => splitWithIds.includes(u.id));
+  }, [selectedGroupId, membersOfSelectedGroup, splitWithIds, users]);
+
 
   const resetForm = () => {
       form.reset({
@@ -229,8 +245,10 @@ export function AddExpenseSheet({ children, open, onOpenChange }: AddExpenseShee
                     <FormLabel>Group</FormLabel>
                       <Select onValueChange={(value) => {
                           field.onChange(value);
+                          // When group changes, set split to all group members
                           const groupMembers = groups.find(g => g.id === value)?.members || [];
                           form.setValue("splitWith", groupMembers);
+                          // Also reset paidBy if current user is not in the new group
                           if(currentUser && !groupMembers.includes(currentUser.id)){
                              form.setValue("paidById", "");
                           } else if (currentUser) {
@@ -260,12 +278,12 @@ export function AddExpenseSheet({ children, open, onOpenChange }: AddExpenseShee
                       <FormLabel>Paid by</FormLabel>
                        <Select onValueChange={field.onChange} value={field.value} defaultValue={field.value}>
                         <FormControl>
-                          <SelectTrigger disabled={!selectedGroupId}>
+                          <SelectTrigger disabled={!selectedGroupId && participantsToDisplay.length === 0}>
                             <SelectValue placeholder="Select who paid" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {membersOfSelectedGroup.map(user => (
+                          {participantsToDisplay.map(user => (
                             <SelectItem key={user.id} value={user.id}>
                               <div className="flex items-center gap-2">
                                 <Avatar className="h-6 w-6">
@@ -284,7 +302,7 @@ export function AddExpenseSheet({ children, open, onOpenChange }: AddExpenseShee
                 />
               </div>
 
-             {selectedGroupId && membersOfSelectedGroup?.length > 0 && (
+             {participantsToDisplay?.length > 0 && (
                 <FormField
                     control={form.control}
                     name="splitWith"
@@ -295,7 +313,7 @@ export function AddExpenseSheet({ children, open, onOpenChange }: AddExpenseShee
                             <FormDescription>Select who this expense should be split with.</FormDescription>
                         </div>
                         <div className="space-y-3 pt-2">
-                        {membersOfSelectedGroup.map((item) => (
+                        {participantsToDisplay.map((item) => (
                             <FormField
                             key={item.id}
                             control={form.control}
