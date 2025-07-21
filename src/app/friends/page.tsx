@@ -59,8 +59,8 @@ export default function FriendsPage() {
     const mySentRequests = new Set<string>();
 
     friendships.forEach(f => {
+      const friendId = f.requesterId === currentUser.id ? f.receiverId : f.requesterId;
       if (f.status === 'accepted') {
-        const friendId = f.requesterId === currentUser.id ? f.receiverId : f.requesterId;
         const user = users.find(u => u.id === friendId);
         if (user) {
           currentFriends.push(user);
@@ -79,7 +79,8 @@ export default function FriendsPage() {
     const nonFriendUsers = users.filter(u => 
         u.id !== currentUser.id && 
         !myFriendshipIds.has(u.id) &&
-        !requests.some(r => r.user.id === u.id)
+        !requests.some(r => r.user.id === u.id) &&
+        !u.email.endsWith('@adhoc.settlesmart.app') // Exclude ad-hoc users from discover
     );
 
     return { friends: currentFriends, friendRequests: requests, otherUsers: nonFriendUsers, sentRequests: mySentRequests };
@@ -157,12 +158,13 @@ export default function FriendsPage() {
                  <Card>
                     <CardHeader>
                         <CardTitle>Your Friends</CardTitle>
-                        <CardDescription>Your connections on SettleSmart.</CardDescription>
+                        <CardDescription>Your connections and contacts on SettleSmart.</CardDescription>
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-4">
                         {friends.map(friend => {
                            const unreadCount = chats.find(c => c.id.includes(friend.id))?.unreadCount?.[currentUser.id] || 0;
+                           const isAdhoc = friend.email.endsWith('@adhoc.settlesmart.app');
                           return (
                           <div key={friend.id} className="flex items-center gap-4 p-2 rounded-lg hover:bg-muted/50">
                               <Avatar className="h-10 w-10">
@@ -170,10 +172,10 @@ export default function FriendsPage() {
                                   <AvatarFallback>{friend.initials}</AvatarFallback>
                               </Avatar>
                               <div className="flex-1">
-                                  <p className="font-semibold">{friend.name}</p>
-                                  <p className="text-sm text-muted-foreground">{friend.email}</p>
+                                  <p className="font-semibold">{friend.name} {isAdhoc && <Badge variant="outline">Contact</Badge>}</p>
+                                  <p className="text-sm text-muted-foreground">{isAdhoc ? 'Not on SettleSmart yet' : friend.email}</p>
                               </div>
-                               <Button variant="ghost" size="icon" onClick={() => router.push(`/chat/${friend.id}`)} disabled={isProcessing} className="relative">
+                               <Button variant="ghost" size="icon" onClick={() => router.push(`/chat/${friend.id}`)} disabled={isProcessing || isAdhoc} className="relative">
                                 <MessageSquare className="h-4 w-4" />
                                 {unreadCount > 0 && (
                                     <Badge variant="destructive" className="absolute top-0 right-0 h-4 w-4 p-0 flex items-center justify-center text-xs">{unreadCount > 9 ? '9+' : unreadCount}</Badge>
@@ -201,7 +203,7 @@ export default function FriendsPage() {
                          {friends.length === 0 && (
                             <div className="col-span-full flex flex-col items-center justify-center text-center text-muted-foreground h-full rounded-lg border-2 border-dashed border-muted/50 py-12">
                                 <h3 className="text-xl font-bold mb-2">No friends yet</h3>
-                                <p className="mb-4">Find users in the "Discover" tab to add friends.</p>
+                                <p className="mb-4">Add an expense with someone, or find users in the "Discover" tab to add friends.</p>
                             </div>
                         )}
                       </div>
@@ -315,5 +317,3 @@ export default function FriendsPage() {
     </>
   );
 }
-
-    

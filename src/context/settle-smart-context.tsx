@@ -191,8 +191,22 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     );
     const unsubPersonalExpenses = onSnapshot(qPersonalExpenses, (snapshot) => {
         const personalExpenses = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), date: doc.data().date.toDate().toISOString() } as Expense));
-        // We merge this with existing expenses, making sure to avoid duplicates
-        setExpenses(prev => [...prev.filter(exp => exp.groupId !== null), ...personalExpenses]);
+        setExpenses(prev => {
+            const groupExpenses = prev.filter(exp => exp.groupId !== null);
+            const merged = [...groupExpenses];
+            const personalExpenseIds = new Set(personalExpenses.map(e => e.id));
+            // Add existing personal expenses not in the new snapshot
+            prev.forEach(e => {
+                if(e.groupId === null && !personalExpenseIds.has(e.id)) {
+                    merged.push(e)
+                }
+            })
+            // Add new/updated personal expenses
+            merged.push(...personalExpenses);
+            // remove duplicates
+            const uniqueExpenses = merged.filter((v,i,a)=>a.findIndex(t=>(t.id === v.id))===i)
+            return uniqueExpenses;
+        });
     });
 
 
@@ -206,14 +220,7 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   
   // Listeners that depend on the user's groups
   useEffect(() => {
-    if (!db || !currentUser) {
-        setExpenses([]);
-        setGroupChecklists({});
-        return;
-    }
-    
-    // If no groups, clear group-related data
-    if (groups.length === 0) {
+    if (!db || !currentUser || groups.length === 0) {
         setExpenses(prev => prev.filter(exp => exp.groupId === null));
         setGroupChecklists({});
         return () => {};
@@ -221,15 +228,17 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     
     const groupIds = groups.map(g => g.id);
 
-    // Fetch expenses for all groups the user is a member of
     const qExpenses = query(collection(db, "expenses"), where("groupId", "in", groupIds));
     const unsubscribeExpenses = onSnapshot(qExpenses, (expSnapshot) => {
         const groupExpenses = expSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), date: doc.data().date.toDate().toISOString() } as Expense));
-        // We merge group expenses with existing personal expenses
-        setExpenses(prev => [...prev.filter(exp => exp.groupId === null), ...groupExpenses]);
+        setExpenses(prev => {
+             const personalExpenses = prev.filter(exp => exp.groupId === null);
+             const merged = [...personalExpenses, ...groupExpenses];
+             const uniqueExpenses = merged.filter((v,i,a)=>a.findIndex(t=>(t.id === v.id))===i);
+             return uniqueExpenses;
+        });
     });
 
-    // Fetch checklists for all groups the user is a member of
     const qChecklists = query(collection(db, "checklists"), where("groupId", "in", groupIds));
     const unsubscribeChecklists = onSnapshot(qChecklists, (checklistSnapshot) => {
         const checklistsData: {[groupId: string]: ChecklistItem[]} = {};
@@ -274,21 +283,23 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   
   const addAdHocUser = async (name: string): Promise<User> => {
     if (!db) throw new Error("DB not initialized");
+    const normalizedName = name.trim();
+    const adHocEmail = `${normalizedName.replace(/\s+/g, '_').toLowerCase()}@adhoc.settlesmart.app`;
     
-    // Check if an ad-hoc user with this name already exists to avoid duplicates
-    const adHocEmail = `${name.replace(/\s+/g, '_').toLowerCase()}@adhoc.settlesmart.app`;
     const q = query(collection(db, "users"), where("email", "==", adHocEmail));
     const existing = await getDocs(q);
+
     if (!existing.empty) {
         const doc = existing.docs[0];
         return { id: doc.id, ...doc.data() } as User;
     }
 
+    const initials = normalizedName.charAt(0).toUpperCase();
     const adHocUser: Omit<User, 'id'> = {
-        name: name,
+        name: normalizedName,
         email: adHocEmail,
-        initials: name.charAt(0).toUpperCase(),
-        avatar: `https://placehold.co/100x100.png?text=${name.charAt(0).toUpperCase()}`
+        initials: initials,
+        avatar: `https://placehold.co/100x100.png?text=${initials}`
     };
     const docRef = await addDoc(collection(db, "users"), adHocUser);
     const newUser = { id: docRef.id, ...adHocUser };
@@ -304,6 +315,28 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
       date: new Date(),
       isRecurring: expenseData.isRecurring || false,
     });
+
+     // Automatically create friendships with ad-hoc users
+     for (const pId of expenseData.splitWith) {
+        const user = findUserById(pId);
+        // If user is ad-hoc (no registered email) and not current user
+        if (user && user.email.endsWith('@adhoc.settlesmart.app') && pId !== currentUser.id) {
+           const friendshipQuery = query(
+              collection(db, "friendships"),
+              where("participantIds", "in", [[currentUser.id, pId], [pId, currentUser.id]])
+            );
+            const existingFriendship = await getDocs(friendshipQuery);
+            if (existingFriendship.empty) {
+                 await addDoc(collection(db, "friendships"), {
+                    requesterId: currentUser.id,
+                    receiverId: pId,
+                    status: 'accepted', // Auto-accept friendship with ad-hoc users
+                    participantIds: [currentUser.id, pId],
+                    createdAt: serverTimestamp()
+                });
+            }
+        }
+     }
   };
 
   const createGroup = async (name: string, memberEmails: string[]) => {
@@ -393,7 +426,10 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
         }
     });
     await batch.commit();
-    await sendMessage(friendId, `${currentUser.name} has marked all debts between you as settled.`, 'system');
+    const friend = findUserById(friendId);
+    if(friend && !friend.email.endsWith('@adhoc.settlesmart.app')) {
+      await sendMessage(friendId, `${currentUser.name} has marked all debts between you as settled.`, 'system');
+    }
   }
   
   const settleAllInGroup = async (groupId: string) => {
@@ -477,6 +513,9 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
   const getChatMessages = (friendId: string, callback: (messages: Message[]) => void) => {
     if (!currentUser || !db) return () => {};
+    const friend = findUserById(friendId);
+     if (!friend || friend.email.endsWith('@adhoc.settlesmart.app')) return () => {};
+
     const chatId = getChatId(currentUser.id, friendId);
     const messagesQuery = query(collection(db, `chats/${chatId}/messages`), orderBy("timestamp", "asc"));
     
@@ -492,6 +531,11 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
   const sendMessage = async (friendId: string, text: string, type: 'user' | 'system' = 'user') => {
     if (!currentUser || !db) throw new Error("Not authenticated");
+    const friend = findUserById(friendId);
+    if (!friend || friend.email.endsWith('@adhoc.settlesmart.app')) {
+      throw new Error("Cannot send messages to non-registered users.");
+    }
+    
     const chatId = getChatId(currentUser.id, friendId);
     const chatRef = doc(db, "chats", chatId);
     const messagesColRef = collection(chatRef, 'messages');
