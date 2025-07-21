@@ -142,7 +142,7 @@ export function AddExpenseSheet({ children, open, onOpenChange }: AddExpenseShee
   };
   
   const selectedGroupId = form.watch("groupId");
-  const membersOfSelectedGroup = groups.find(g => g.id === selectedGroupId)?.members.map(id => findUserById(id)).filter(Boolean) as User[];
+  const membersOfSelectedGroup = groups.find(g => g.id === selectedGroupId)?.members.map(id => findUserById(id)).filter(Boolean) as User[] || [];
 
   const resetForm = () => {
       form.reset({
@@ -259,7 +259,7 @@ export function AddExpenseSheet({ children, open, onOpenChange }: AddExpenseShee
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {membersOfSelectedGroup.map(user => (
+                          {membersOfSelectedGroup && membersOfSelectedGroup.map(user => (
                             <SelectItem key={user.id} value={user.id}>
                               <div className="flex items-center gap-2">
                                 <Avatar className="h-6 w-6">
@@ -305,7 +305,7 @@ export function AddExpenseSheet({ children, open, onOpenChange }: AddExpenseShee
                                         checked={field.value?.includes(item.id)}
                                         onCheckedChange={(checked) => {
                                         return checked
-                                            ? field.onChange([...field.value, item.id])
+                                            ? field.onChange([...(field.value || []), item.id])
                                             : field.onChange(
                                                 field.value?.filter(
                                                 (value) => value !== item.id
