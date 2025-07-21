@@ -4,15 +4,15 @@
 import { useMemo, useState, useTransition } from "react";
 import { Header } from "@/components/header";
 import { useSettleSmart } from "@/context/settle-smart-context";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/utils";
-import { ArrowLeftRight, Loader2, MessageSquare } from "lucide-react";
+import { ArrowLeftRight, Loader2, MessageSquare, MoreVertical, ShieldCheck } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import type { User } from "@/lib/types";
 import { useToast } from "@/components/ui/use-toast";
-import { TrustScoreIndicator } from "@/components/trust-score-indicator";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 interface FriendWithBalance {
     id: string;
@@ -33,7 +33,6 @@ export default function FriendsPage() {
   const friendsWithBalances = useMemo(() => {
     const friendMap: Map<string, FriendWithBalance> = new Map();
 
-    // Initialize map with all known users (except current user) to create a full contact list
     users.forEach(u => {
         if (u.id !== currentUser.id) {
             friendMap.set(u.id, {
@@ -47,12 +46,10 @@ export default function FriendsPage() {
         }
     });
     
-    // Now, calculate balances for each friend based on settlements
     balances.settlements.forEach(s => {
       let friend: FriendWithBalance | undefined;
       let friendId: string | undefined;
 
-      // Determine who the friend is in this settlement
       if (s.from.id === currentUser.id) {
         friendId = s.to.id;
       } else if (s.to.id === currentUser.id) {
@@ -62,7 +59,6 @@ export default function FriendsPage() {
       if (friendId) {
         friend = friendMap.get(friendId);
 
-        // This case handles ad-hoc users who might not be in the main user list
         if (!friend) {
             const participant = s.from.id === friendId ? s.from : s.to;
             friend = {
@@ -74,19 +70,16 @@ export default function FriendsPage() {
             friendMap.set(friendId, friend);
         }
 
-        // Update balance
         if (s.from.id === currentUser.id) {
-          friend.balance -= s.amount; // You owe them
+          friend.balance -= s.amount; 
         } else {
-          friend.balance += s.amount; // They owe you
+          friend.balance += s.amount; 
         }
       }
     });
     
-    // Return all users, now with their calculated balances
     return Array.from(friendMap.values())
       .sort((a, b) => {
-        // Sort by who has a balance first, then alphabetically
         const aHasBalance = Math.abs(a.balance) > 0.01;
         const bHasBalance = Math.abs(b.balance) > 0.01;
         if (aHasBalance && !bHasBalance) return -1;
@@ -115,71 +108,64 @@ export default function FriendsPage() {
     });
   }
 
-  const getTrustScore = (balance: number) => {
-    // balance > 0 -> they owe you (good for them, they borrowed, so their score is lower)
-    // balance < 0 -> you owe them (bad for them, they lent, so their score is higher)
-    let score = 70; // Base score
-    
-    // If they owe you, their score decreases based on the amount.
-    if (balance > 0) {
-      score -= Math.min(30, balance / 10);
-    } 
-    // If you owe them, their score increases because they trusted you.
-    else if (balance < 0) {
-      score += Math.min(25, Math.abs(balance) / 10);
-    }
-    
-    return Math.max(0, Math.min(100, score));
-  };
-
   return (
     <AlertDialog>
       <div className="flex flex-col min-h-screen w-full">
         <Header pageTitle="Friends" />
         <main className="flex-1 p-4 sm:p-6 md:p-8">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {friendsWithBalances.map(friend => (
-              <Card key={friend.id} className="flex flex-col">
-                <CardHeader className="flex flex-row items-center gap-4">
-                  <Avatar className="h-12 w-12">
-                    <AvatarImage src={friend.avatar} alt={friend.name} />
-                    <AvatarFallback>{friend.initials}</AvatarFallback>
-                  </Avatar>
-                  <div>
-                    <CardTitle>{friend.name}</CardTitle>
-                    <CardDescription>{friend.email || 'Ad-hoc friend'}</CardDescription>
-                  </div>
+            <Card>
+                <CardHeader>
+                    <CardTitle>Your Contacts</CardTitle>
+                    <CardDescription>A list of all people you've interacted with.</CardDescription>
                 </CardHeader>
-                <CardContent className="flex-1 space-y-4 text-center">
-                   <div className={`text-2xl font-bold ${friend.balance > 0 ? 'text-green-500' : friend.balance < 0 ? 'text-red-500' : 'text-muted-foreground'}`}>
-                     {formatCurrency(Math.abs(friend.balance))}
-                   </div>
-                   <div className="text-sm text-muted-foreground">
-                      {friend.balance > 0.01 ? `owes you` : friend.balance < -0.01 ? `you owe` : 'Settled up'}
-                   </div>
-                   <TrustScoreIndicator score={getTrustScore(friend.balance)} />
+                <CardContent>
+                    <div className="space-y-4">
+                        {friendsWithBalances.map(friend => (
+                        <div key={friend.id} className="flex items-center gap-4 p-2 rounded-lg hover:bg-muted/50">
+                            <Avatar className="h-10 w-10">
+                                <AvatarImage src={friend.avatar} alt={friend.name} />
+                                <AvatarFallback>{friend.initials}</AvatarFallback>
+                            </Avatar>
+                            <div className="flex-1">
+                                <p className="font-semibold">{friend.name}</p>
+                                <p className={`text-sm ${friend.balance > 0.01 ? 'text-green-500' : friend.balance < -0.01 ? 'text-red-500' : 'text-muted-foreground'}`}>
+                                    {friend.balance > 0.01 ? `Owes you ${formatCurrency(Math.abs(friend.balance))}` : friend.balance < -0.01 ? `You owe ${formatCurrency(Math.abs(friend.balance))}` : 'Settled up'}
+                                </p>
+                            </div>
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button variant="ghost" size="icon">
+                                        <MoreVertical className="h-4 w-4" />
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                     <AlertDialogTrigger asChild>
+                                        <DropdownMenuItem disabled={Math.abs(friend.balance) < 0.01} onSelect={() => setSettleFriend(friend)}>
+                                            <ArrowLeftRight className="mr-2 h-4 w-4" />
+                                            Settle Up
+                                        </DropdownMenuItem>
+                                    </AlertDialogTrigger>
+                                    <DropdownMenuItem disabled>
+                                        <MessageSquare className="mr-2 h-4 w-4" />
+                                        Message
+                                    </DropdownMenuItem>
+                                     <DropdownMenuItem disabled>
+                                        <ShieldCheck className="mr-2 h-4 w-4" />
+                                        View Trust Score
+                                    </DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                        </div>
+                        ))}
+                        {friendsWithBalances.length === 0 && (
+                            <div className="col-span-full flex flex-col items-center justify-center text-center text-muted-foreground h-full rounded-lg border-2 border-dashed border-muted/50 py-12">
+                                <h3 className="text-xl font-bold mb-2">No friends yet</h3>
+                                <p className="mb-4">Add expenses with new people to see them here.</p>
+                            </div>
+                        )}
+                    </div>
                 </CardContent>
-                <CardFooter className="flex flex-col gap-2">
-                   <AlertDialogTrigger asChild>
-                      <Button className="w-full" disabled={Math.abs(friend.balance) < 0.01} onClick={() => setSettleFriend(friend)}>
-                          <ArrowLeftRight className="mr-2 h-4 w-4" />
-                          Settle Up
-                      </Button>
-                   </AlertDialogTrigger>
-                   <Button variant="outline" className="w-full" disabled>
-                     <MessageSquare className="mr-2 h-4 w-4" />
-                     Message
-                   </Button>
-                </CardFooter>
-              </Card>
-            ))}
-             {friendsWithBalances.length === 0 && (
-                  <div className="col-span-full flex flex-col items-center justify-center text-center text-muted-foreground h-full rounded-lg border-2 border-dashed border-muted/50 py-12">
-                      <h3 className="text-xl font-bold mb-2">No friends yet</h3>
-                      <p className="mb-4">Add expenses with new people to see them here.</p>
-                  </div>
-              )}
-          </div>
+            </Card>
         </main>
       </div>
       <AlertDialogContent>
