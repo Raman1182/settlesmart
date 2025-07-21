@@ -48,21 +48,3 @@ export interface ChecklistItem {
   name: string;
   completed: boolean;
 }
-
-export interface Message {
-  id: string;
-  chatId: string;
-  senderId: string;
-  text: string;
-  read: boolean;
-  createdAt: string;
-}
-
-export interface Friendship {
-    id: string;
-    userIds: string[];
-    status: 'pending' | 'accepted' | 'rejected';
-    requestedBy: string;
-}
-
-    

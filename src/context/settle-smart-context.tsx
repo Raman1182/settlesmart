@@ -6,7 +6,7 @@ import { initializeApp, getApps, getApp, type FirebaseApp } from "firebase/app";
 import { getAuth, onAuthStateChanged, User as FirebaseUser, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut, type Auth } from "firebase/auth";
 import { getFirestore, collection, addDoc, query, where, onSnapshot, doc, updateDoc, serverTimestamp, getDocs, orderBy, deleteDoc, getDoc, setDoc, arrayUnion, arrayRemove, writeBatch, type Firestore } from "firebase/firestore";
 import { firebaseConfig } from "@/lib/firebase";
-import type { User, Group, Expense, Participant, UnequalSplit, ChecklistItem, Message, Friendship } from "@/lib/types";
+import type { User, Group, Expense, Participant, UnequalSplit, ChecklistItem } from "@/lib/types";
 
 interface AddExpenseData {
   description: string;
@@ -26,8 +26,6 @@ interface SettleSmartContextType {
   users: User[];
   groups: Group[];
   expenses: Expense[];
-  messages: Message[];
-  friendships: Friendship[];
   addExpense: (expense: AddExpenseData) => void;
   balances: {
     totalOwedToUser: number;
@@ -54,12 +52,6 @@ interface SettleSmartContextType {
   signUp: (email: string, pass: string) => Promise<any>;
   signIn: (email: string, pass: string) => Promise<any>;
   signOut: () => Promise<void>;
-  sendFriendRequest: (email: string) => Promise<void>;
-  acceptFriendRequest: (friendshipId: string) => Promise<void>;
-  rejectFriendRequest: (friendshipId: string) => Promise<void>;
-  getChatMessages: (friendId: string, callback: (messages: Message[]) => void) => () => void;
-  sendMessage: (receiverId: string, text: string) => Promise<void>;
-  markMessageAsRead: (messageId: string) => Promise<void>;
   addAdHocUser: (name: string) => Promise<User>;
 }
 
@@ -73,23 +65,17 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const [groups, setGroups] = useState<Group[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [groupChecklists, setGroupChecklists] = useState<{ [groupId: string]: ChecklistItem[] }>({});
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [friendships, setFriendships] = useState<Friendship[]>([]);
 
-  // Firebase services state
   const [auth, setAuth] = useState<Auth | null>(null);
   const [db, setDb] = useState<Firestore | null>(null);
 
-
   useEffect(() => {
-    // Initialize Firebase
     const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
     const authInstance = getAuth(app);
     const dbInstance = getFirestore(app);
     setAuth(authInstance);
     setDb(dbInstance);
 
-    // Set up auth state listener
     const unsubscribeAuth = onAuthStateChanged(authInstance, async (user) => {
         if (user) {
             const userRef = doc(dbInstance, "users", user.uid);
@@ -111,12 +97,9 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
             }
         } else {
             setCurrentUser(null);
-            // Reset all data states on logout
             setUsers([]);
             setGroups([]);
             setExpenses([]);
-            setFriendships([]);
-            setMessages([]);
             setGroupChecklists({});
         }
         setIsAuthLoading(false);
@@ -127,12 +110,10 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     };
   }, []);
 
-  // Effect for users, groups, friendships
   useEffect(() => {
     if (!currentUser?.id || !db) {
         setGroups([]);
         setExpenses([]);
-        setFriendships([]);
         setGroupChecklists({});
         setUsers([]);
         return;
@@ -140,38 +121,23 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     
     const currentUserId = currentUser.id;
 
-    // Listener for all users
     const unsubscribeUsers = onSnapshot(collection(db, "users"), (snapshot) => {
         const allUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
         setUsers(allUsers);
     });
 
-    // Listener for groups the user is a member of
     const qGroups = query(collection(db, "groups"), where("members", "array-contains", currentUserId));
     const unsubscribeGroups = onSnapshot(qGroups, (snapshot) => {
         const userGroups: Group[] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data()} as Group));
         setGroups(userGroups);
     });
 
-    // Listener for friendships
-    const qFriendships = query(collection(db, "friendships"), where("userIds", "array-contains", currentUserId));
-    const unsubscribeFriendships = onSnapshot(qFriendships, (querySnapshot) => {
-        const userFriendships: Friendship[] = [];
-        querySnapshot.forEach((doc) => {
-            userFriendships.push({ id: doc.id, ...doc.data()} as Friendship);
-        });
-        setFriendships(userFriendships);
-    });
-
-    // Return cleanup function for all top-level listeners
     return () => {
         unsubscribeUsers();
         unsubscribeGroups();
-        unsubscribeFriendships();
     };
   }, [currentUser?.id, db]);
   
-    // Effect for expenses based on groups
     useEffect(() => {
         if (!db || groups.length === 0) {
             setExpenses([]);
@@ -190,7 +156,6 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
         return () => unsubscribeExpenses();
     }, [db, groups]);
 
-    // Effect for checklists based on groups
     useEffect(() => {
         if (!db || groups.length === 0) {
             setGroupChecklists({});
@@ -211,49 +176,6 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
         });
         return () => unsubscribeChecklists();
     }, [db, groups]);
-  
-  // Memoize chatIds to prevent re-renders unless friendships actually change
-  const chatIdsString = useMemo(() => {
-    if (!currentUser?.id || friendships.length === 0) return '[]';
-    
-    const acceptedFriendships = friendships.filter(f => f.status === 'accepted');
-    if (acceptedFriendships.length === 0) return '[]';
-    
-    const chatIds = acceptedFriendships.map(f => [f.userIds[0], f.userIds[1]].sort().join('_'));
-    return JSON.stringify(chatIds.sort());
-  }, [friendships, currentUser?.id]);
-
-
-  // Decoupled effect for messages
-  useEffect(() => {
-      if (!currentUser?.id || !db) {
-          setMessages([]);
-          return;
-      }
-      const chatIds = JSON.parse(chatIdsString);
-      if (chatIds.length === 0) {
-          setMessages([]);
-          return;
-      }
-      
-      const qMessages = query(collection(db, "messages"), where("chatId", "in", chatIds), orderBy("createdAt"));
-      const unsubscribeMessages = onSnapshot(qMessages, (msgSnapshot) => {
-          const receivedMessages: Message[] = msgSnapshot.docs.map(doc => {
-              const data = doc.data();
-              return {
-                  id: doc.id,
-                  ...data,
-                  createdAt: data.createdAt?.toDate().toISOString() || new Date().toISOString()
-              } as Message
-          });
-          setMessages(receivedMessages);
-      }, (error) => {
-          console.error("Message listener error:", error);
-      });
-  
-      return () => unsubscribeMessages();
-  }, [currentUser?.id, db, chatIdsString]);
-
 
   const signUp = async (email: string, pass: string) => {
     if (!auth) throw new Error("Auth not initialized");
@@ -268,103 +190,6 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const signOut = () => {
     if (!auth) throw new Error("Auth not initialized");
     return firebaseSignOut(auth);
-  }
-
-  const sendFriendRequest = async (email: string) => {
-    if (!currentUser || !db) throw new Error("Not authenticated or DB not initialized");
-    
-    const usersRef = collection(db, 'users');
-    const q = query(usersRef, where('email', '==', email));
-    const toUserSnapshot = await getDocs(q);
-
-    if (toUserSnapshot.empty) {
-      throw new Error('User with that email does not exist.');
-    }
-    const toUser = { id: toUserSnapshot.docs[0].id, ...toUserSnapshot.docs[0].data() };
-
-    if (toUser.id === currentUser.id) {
-      throw new Error("You can't send a request to yourself.");
-    }
-
-    const friendshipsRef = collection(db, 'friendships');
-    const userIds = [currentUser.id, toUser.id].sort();
-    const existingQuery = query(friendshipsRef, where('userIds', '==', userIds));
-    const existingSnapshot = await getDocs(existingQuery);
-
-    if (!existingSnapshot.empty) {
-      throw new Error("You are already friends or a request is pending.");
-    }
-
-    await addDoc(friendshipsRef, {
-      userIds: userIds,
-      status: 'pending',
-      requestedBy: currentUser.id,
-      createdAt: serverTimestamp(),
-    });
-  }
-
-  const acceptFriendRequest = async (friendshipId: string) => {
-     if (!db) return;
-     const friendshipRef = doc(db, 'friendships', friendshipId);
-     await updateDoc(friendshipRef, { status: 'accepted' });
-  }
-
-  const rejectFriendRequest = async (friendshipId: string) => {
-     if (!db) return;
-     const friendshipRef = doc(db, 'friendships', friendshipId);
-     await deleteDoc(friendshipRef);
-  }
-  
-   const getChatMessages = (friendId: string, callback: (messages: Message[]) => void) => {
-    // Sanity check inputs to prevent invalid queries
-    if (!currentUser?.id || !friendId || !db) {
-        console.error("getChatMessages failed: currentUser, friendId, or db is not available.", {
-            hasCurrentUser: !!currentUser?.id,
-            hasFriendId: !!friendId,
-            hasDb: !!db,
-        });
-        return () => {}; // Return a no-op cleanup function
-    }
-
-    const chatId = [currentUser.id, friendId].sort().join('_');
-    
-    const q = query(
-        collection(db, "messages"), 
-        where("chatId", "==", chatId),
-        orderBy("createdAt", "asc")
-    );
-    
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-        const chatMessages = snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data(),
-            createdAt: doc.data().createdAt?.toDate().toISOString() || new Date().toISOString(),
-        } as Message));
-        callback(chatMessages);
-    }, (error) => {
-        console.error(`Firestore listener error for chatID ${chatId}:`, error);
-    });
-    
-    return unsubscribe; // Return the actual unsubscribe function from onSnapshot
-  };
-
-  const sendMessage = async (receiverId: string, text: string) => {
-    if (!currentUser || !db) throw new Error("Not authenticated or DB not initialized");
-    const chatId = [currentUser.id, receiverId].sort().join('_');
-    
-    await addDoc(collection(db, "messages"), {
-      chatId: chatId, 
-      senderId: currentUser.id,
-      text,
-      read: false,
-      createdAt: serverTimestamp()
-    });
-  }
-  
-  const markMessageAsRead = async (messageId: string) => {
-    if (!db) return;
-    const messageRef = doc(db, "messages", messageId);
-    await updateDoc(messageRef, { read: true });
   }
 
   const findUserById = useCallback((id: string) => {
@@ -442,13 +267,10 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const deleteGroup = async (groupId: string) => {
     if (!db) return;
     const batch = writeBatch(db);
-    // Delete group document
     batch.delete(doc(db, "groups", groupId));
-    // Delete associated expenses
     const expQuery = query(collection(db, "expenses"), where("groupId", "==", groupId));
     const expSnap = await getDocs(expQuery);
     expSnap.forEach(doc => batch.delete(doc.ref));
-    // Delete associated checklist
     batch.delete(doc(db, "checklists", groupId));
     await batch.commit();
   };
@@ -619,8 +441,6 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     users,
     groups,
     expenses,
-    messages,
-    friendships,
     addExpense,
     balances,
     getGroupBalances,
@@ -637,12 +457,6 @@ export const SettleSmartProvider: React.FC<{ children: React.ReactNode }> = ({ c
     signUp,
     signIn,
     signOut,
-    sendFriendRequest,
-    acceptFriendRequest,
-    rejectFriendRequest,
-    getChatMessages,
-    sendMessage,
-    markMessageAsRead,
     addAdHocUser,
   };
 

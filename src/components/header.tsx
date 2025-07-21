@@ -16,19 +16,9 @@ interface HeaderProps {
 }
 
 export function Header({ pageTitle = "Dashboard" }: HeaderProps) {
-    const { messages, findUserById, markMessageAsRead, currentUser } = useSettleSmart();
+    const { findUserById, currentUser } = useSettleSmart();
     const router = useRouter();
     
-    // Filter messages for the current user that are not from the current user
-    const relevantMessages = messages.filter(m => m.chatId.includes(currentUser?.id || '') && m.senderId !== currentUser?.id);
-    const unreadCount = relevantMessages.filter(m => !m.read).length;
-    
-    const handleNotificationClick = (message: any) => {
-        markMessageAsRead(message.id);
-        const friendId = message.chatId.replace(currentUser!.id, '').replace('_', '');
-        router.push(`/chat/${friendId}`);
-    }
-
     return (
         <header className="flex h-16 items-center gap-4 border-b bg-background/95 backdrop-blur-sm px-4 lg:px-6 sticky top-0 z-30">
           <div className="w-full flex-1">
@@ -46,29 +36,13 @@ export function Header({ pageTitle = "Dashboard" }: HeaderProps) {
                 <DropdownMenuTrigger asChild>
                     <Button variant="ghost" size="icon" className="rounded-full relative">
                         <Bell className="h-5 w-5" />
-                        {unreadCount > 0 && (
-                            <Badge className="absolute -top-1 -right-1 h-5 w-5 justify-center p-0">{unreadCount}</Badge>
-                        )}
                         <span className="sr-only">Toggle notifications</span>
                     </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-80">
                     <DropdownMenuLabel>Notifications</DropdownMenuLabel>
                     <DropdownMenuSeparator />
-                    {relevantMessages.length === 0 && <DropdownMenuItem disabled>No new messages</DropdownMenuItem>}
-                    {relevantMessages.slice(0, 5).map(message => {
-                        const sender = findUserById(message.senderId);
-                        return (
-                            <DropdownMenuItem key={message.id} onSelect={() => handleNotificationClick(message)}>
-                                <div className="flex flex-col gap-1">
-                                    <p className="font-semibold">{sender?.name || 'Unknown'}</p>
-                                    <p className="text-sm text-muted-foreground">{message.text}</p>
-                                    <p className="text-xs text-muted-foreground">{formatDistanceToNow(new Date(message.createdAt), { addSuffix: true })}</p>
-                                </div>
-                                {!message.read && <div className="ml-auto h-2 w-2 rounded-full bg-primary self-start mt-1"></div>}
-                            </DropdownMenuItem>
-                        )
-                    })}
+                    <DropdownMenuItem disabled>No new notifications</DropdownMenuItem>
                 </DropdownMenuContent>
             </DropdownMenu>
             <UserNav />
@@ -76,5 +50,3 @@ export function Header({ pageTitle = "Dashboard" }: HeaderProps) {
         </header>
     );
 }
-
-    

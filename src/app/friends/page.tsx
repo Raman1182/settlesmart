@@ -8,9 +8,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/utils";
-import { ArrowLeftRight, Loader2, MessageSquare, MoreVertical, ShieldCheck, Send, Plus, UserPlus, Check, X } from "lucide-react";
+import { ArrowLeftRight, Loader2, MoreVertical, ShieldCheck, Send, Plus, UserPlus, Check, X } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import type { User, Friendship } from "@/lib/types";
+import type { User } from "@/lib/types";
 import { useToast } from "@/components/ui/use-toast";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { TrustScoreIndicator } from "@/components/trust-score-indicator";
@@ -32,12 +32,10 @@ interface FriendWithBalance {
 
 
 export default function FriendsPage() {
-  const { users, currentUser, balances, settleFriendDebt, isAuthLoading, friendships, sendFriendRequest, acceptFriendRequest, rejectFriendRequest, findUserById } = useSettleSmart();
+  const { users, currentUser, balances, settleFriendDebt, isAuthLoading } = useSettleSmart();
   const { toast } = useToast();
   const [settleFriend, setSettleFriend] = useState<FriendWithBalance | null>(null);
   const [isSettling, startSettleTransition] = useTransition();
-  const [isAddFriendOpen, setIsAddFriendOpen] = useState(false);
-  const [newFriendEmail, setNewFriendEmail] = useState("");
   const router = useRouter();
   
   useEffect(() => {
@@ -48,16 +46,9 @@ export default function FriendsPage() {
 
   const friendsWithBalances = useMemo(() => {
     if (!currentUser) return [];
-
-    const acceptedFriendIds = friendships
-      .filter(f => f.status === 'accepted')
-      .flatMap(f => f.userIds)
-      .filter(id => id !== currentUser.id);
-    
-    const friendUsers = users.filter(u => acceptedFriendIds.includes(u.id));
     
     const friendMap: Map<string, FriendWithBalance> = new Map();
-     friendUsers.forEach(u => {
+     users.forEach(u => {
         if (u.id !== currentUser.id) {
             friendMap.set(u.id, {
                 id: u.id,
@@ -87,12 +78,7 @@ export default function FriendsPage() {
     
     return Array.from(friendMap.values())
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [users, currentUser, balances, friendships]);
-
-  const pendingRequests = useMemo(() => {
-    if (!currentUser) return [];
-    return friendships.filter(f => f.status === 'pending' && f.requestedBy !== currentUser.id);
-  }, [friendships, currentUser]);
+  }, [users, currentUser, balances]);
   
   const handleSettle = () => {
     if (!settleFriend) return;
@@ -130,21 +116,6 @@ export default function FriendsPage() {
       })
   }
   
-  const handleAddFriend = async () => {
-    if (!newFriendEmail.trim()) {
-        toast({ variant: "destructive", title: "Email is required" });
-        return;
-    }
-    try {
-        await sendFriendRequest(newFriendEmail);
-        toast({ title: "Friend Request Sent!", description: `Your request to ${newFriendEmail} has been sent.` });
-        setIsAddFriendOpen(false);
-        setNewFriendEmail("");
-    } catch (error: any) {
-        toast({ variant: "destructive", title: "Could not send request", description: error.message });
-    }
-  };
-  
   if (isAuthLoading || !currentUser) {
     return (
        <div className="flex items-center justify-center min-h-screen bg-background">
@@ -156,81 +127,14 @@ export default function FriendsPage() {
   return (
     <>
       <div className="flex flex-col min-h-screen w-full">
-        <Header pageTitle="Friends" />
+        <Header pageTitle="Contacts" />
         <main className="flex-1 p-4 sm:p-6 md:p-8 space-y-8">
-            {pendingRequests.length > 0 && (
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Pending Requests</CardTitle>
-                        <CardDescription>People who want to be your friend.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        {pendingRequests.map(req => {
-                            const requestorId = req.userIds.find(id => id !== currentUser.id)!;
-                            const requestor = findUserById(requestorId);
-                            if (!requestor) return null;
-                            return (
-                                <div key={req.id} className="flex items-center justify-between gap-4 p-2 rounded-lg">
-                                    <div className="flex items-center gap-4">
-                                        <Avatar className="h-10 w-10">
-                                            <AvatarImage src={requestor.avatar} alt={requestor.name} />
-                                            <AvatarFallback>{requestor.initials}</AvatarFallback>
-                                        </Avatar>
-                                        <div className="flex-1">
-                                            <p className="font-semibold">{requestor.name}</p>
-                                            <p className="text-sm text-muted-foreground">{requestor.email}</p>
-                                        </div>
-                                    </div>
-                                    <div className="flex gap-2">
-                                        <Button size="icon" variant="outline" onClick={() => acceptFriendRequest(req.id)}>
-                                            <Check className="h-4 w-4 text-green-500" />
-                                        </Button>
-                                        <Button size="icon" variant="outline" onClick={() => rejectFriendRequest(req.id)}>
-                                            <X className="h-4 w-4 text-red-500" />
-                                        </Button>
-                                    </div>
-                                </div>
-                            )
-                        })}
-                    </CardContent>
-                </Card>
-            )}
-
             <Card>
                 <CardHeader className="flex flex-row items-center justify-between">
                     <div>
-                        <CardTitle>Your Friends</CardTitle>
-                        <CardDescription>Your accepted friends and contacts.</CardDescription>
+                        <CardTitle>Your Contacts</CardTitle>
+                        <CardDescription>All users on the SettleSmart platform.</CardDescription>
                     </div>
-                     <Dialog open={isAddFriendOpen} onOpenChange={setIsAddFriendOpen}>
-                        <Button onClick={() => setIsAddFriendOpen(true)}>
-                            <UserPlus className="mr-2 h-4 w-4" />
-                            Add Friend
-                        </Button>
-                        <DialogContent>
-                            <DialogHeader>
-                                <DialogTitle>Add a Friend</DialogTitle>
-                                <DialogDescription>
-                                    Send a friend request by entering their email address.
-                                </DialogDescription>
-                            </DialogHeader>
-                            <div className="space-y-2 py-4">
-                                <Label htmlFor="email">Friend's Email</Label>
-                                <Input
-                                    id="email"
-                                    type="email"
-                                    placeholder="friend@example.com"
-                                    value={newFriendEmail}
-                                    onChange={(e) => setNewFriendEmail(e.target.value)}
-                                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddFriend(); } }}
-                                />
-                            </div>
-                            <DialogFooter>
-                                <DialogClose asChild><Button variant="outline">Cancel</Button></DialogClose>
-                                <Button onClick={handleAddFriend}>Send Request</Button>
-                            </DialogFooter>
-                        </DialogContent>
-                    </Dialog>
                 </CardHeader>
                 <CardContent>
                     <div className="space-y-4">
@@ -263,10 +167,6 @@ export default function FriendsPage() {
                                                 Settle Up
                                             </DropdownMenuItem>
                                         </AlertDialogTrigger>
-                                        <DropdownMenuItem disabled={!friend.isRegistered} onSelect={() => router.push(`/chat/${friend.id}`)}>
-                                            <MessageSquare className="mr-2 h-4 w-4" />
-                                            Message
-                                        </DropdownMenuItem>
                                         <DropdownMenuItem onClick={() => handleShowTrustScore(friend)}>
                                             <ShieldCheck className="mr-2 h-4 w-4" />
                                             View Trust Score
@@ -297,8 +197,8 @@ export default function FriendsPage() {
                         ))}
                         {friendsWithBalances.length === 0 && (
                             <div className="col-span-full flex flex-col items-center justify-center text-center text-muted-foreground h-full rounded-lg border-2 border-dashed border-muted/50 py-12">
-                                <h3 className="text-xl font-bold mb-2">No friends yet</h3>
-                                <p className="mb-4">Add your friends to start sharing expenses with them.</p>
+                                <h3 className="text-xl font-bold mb-2">No other users yet</h3>
+                                <p className="mb-4">You're the first one here! Invite others to join.</p>
                             </div>
                         )}
                     </div>
