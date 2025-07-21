@@ -1,6 +1,8 @@
+
 export type User = {
-  id: string;
+  id: string; // This will be the Firebase Auth UID
   name: string;
+  email: string;
   avatar: string;
   initials: string;
 };
@@ -19,7 +21,7 @@ export type Expense = {
 export type Group = {
   id:string;
   name: string;
-  members: string[];
+  members: string[]; // array of user IDs
 };
 
 export type Balance = {

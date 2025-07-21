@@ -1,3 +1,4 @@
+
 "use client";
 
 import {
@@ -19,7 +20,11 @@ import { useSettleSmart } from "@/context/settle-smart-context";
 import { LogOut, Settings, User as UserIcon } from "lucide-react";
 
 export function UserNav() {
-  const { currentUser } = useSettleSmart();
+  const { currentUser, logout } = useSettleSmart();
+
+  if (!currentUser) {
+    return null;
+  }
 
   return (
     <DropdownMenu>
@@ -36,7 +41,7 @@ export function UserNav() {
           <div className="flex flex-col space-y-1">
             <p className="text-sm font-medium leading-none">{currentUser.name}</p>
             <p className="text-xs leading-none text-muted-foreground">
-              {currentUser.id}@example.com
+              {currentUser.email}
             </p>
           </div>
         </DropdownMenuLabel>
@@ -52,7 +57,7 @@ export function UserNav() {
           </DropdownMenuItem>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
-        <DropdownMenuItem disabled>
+        <DropdownMenuItem onClick={logout}>
           <LogOut />
           <span>Log out</span>
         </DropdownMenuItem>
