@@ -1,0 +1,56 @@
+'use server';
+/**
+ * @fileOverview Parses expense details from natural language input.
+ *
+ * - parseExpense - A function that takes a natural language expense description and returns structured expense details.
+ * - ParseExpenseInput - The input type for the parseExpense function.
+ * - ParseExpenseOutput - The return type for the parseExpense function.
+ */
+
+import {ai} from '@/ai/genkit';
+import {z} from 'genkit';
+
+const ParseExpenseInputSchema = z.object({
+  naturalLanguageInput: z
+    .string()
+    .describe('A natural language description of the expense.'),
+});
+export type ParseExpenseInput = z.infer<typeof ParseExpenseInputSchema>;
+
+const ParseExpenseOutputSchema = z.object({
+  amount: z.number().describe('The amount of the expense.'),
+  participants: z
+    .array(z.string())
+    .describe('The names of the participants involved in the expense.'),
+  description: z.string().describe('A short description of the expense.'),
+});
+export type ParseExpenseOutput = z.infer<typeof ParseExpenseOutputSchema>;
+
+export async function parseExpense(input: ParseExpenseInput): Promise<ParseExpenseOutput> {
+  return parseExpenseFlow(input);
+}
+
+const prompt = ai.definePrompt({
+  name: 'parseExpensePrompt',
+  input: {schema: ParseExpenseInputSchema},
+  output: {schema: ParseExpenseOutputSchema},
+  prompt: `You are an AI assistant that extracts expense information from natural language input.
+
+  Given the following input, extract the amount, participants, and description of the expense.
+
+  Input: {{{naturalLanguageInput}}}
+
+  Output the information in JSON format.`,
+});
+
+const parseExpenseFlow = ai.defineFlow(
+  {
+    name: 'parseExpenseFlow',
+    inputSchema: ParseExpenseInputSchema,
+    outputSchema: ParseExpenseOutputSchema,
+  },
+  async input => {
+    const {output} = await prompt(input);
+    return output!;
+  }
+);
