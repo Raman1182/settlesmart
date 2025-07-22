@@ -4,48 +4,48 @@
 
 @layer base {
   :root {
-    /* Base Palette (Light Mode - Neo-Y2K) */
-    --background: 0 100% 97%; /* #FFF1F1 */
-    --foreground: 0 0% 17%; /* #2C2C2C */
+    /* Custom Light Mode (Pink/Green/Violet) */
+    --background: 240 60% 99%; /* Very light blue-white */
+    --foreground: 257 20% 25%; /* Dark Violet */
 
     --card: 0 0% 100%; /* #FFFFFF */
-    --card-foreground: 0 0% 17%; /* #2C2C2C */
+    --card-foreground: 257 20% 25%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 17%;
+    --popover-foreground: 257 20% 25%;
 
     /* Primary Accent (Bubblegum Pink) */
-    --primary: 350 100% 88%; /* #FFC0CB */
-    --primary-foreground: 0 0% 15%; /* A darker text for contrast on pink */
+    --primary: 340 90% 85%; /* #FFB3D9 */
+    --primary-foreground: 340 50% 15%; 
 
-    /* Secondary Accent (Cotton Candy Blue) */
-    --secondary: 180 56% 82%; /* #B5EAEA */
-    --secondary-foreground: 0 0% 15%;
+    /* Secondary Accent (Mint Green) */
+    --secondary: 140 60% 90%; /* #D1F2E1 */
+    --secondary-foreground: 140 30% 20%;
 
-    --muted: 180 50% 92%; /* Lighter version of secondary */
-    --muted-foreground: 0 0% 45%; /* #737373 */
+    --muted: 240 25% 94%;
+    --muted-foreground: 240 5% 45%; 
 
-    /* Accent (Peach Cream) */
-    --accent: 28 100% 91%; /* #FFDAC1 */
-    --accent-foreground: 0 0% 15%;
+    /* Accent (Soft Violet) */
+    --accent: 260 90% 92%; /* #E0D9FA */
+    --accent-foreground: 260 40% 20%;
     
     /* Semantic Colors */
-    --destructive: 0 84% 60%; /* #F87171 */
+    --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
     
     /* Borders & Inputs */
-    --border: 0 0% 90%; /* #E5E5E5 */
-    --input: 0 0% 90%;
-    --ring: 350 100% 88%; /* Bubblegum Pink for focus */
+    --border: 240 10% 90%;
+    --input: 240 10% 90%;
+    --ring: 340 90% 85%; /* Pink for focus */
 
     --radius: 0.75rem;
 
     /* Chart Colors */
-    --chart-1: 28 100% 85%;  /* Peachy */
-    --chart-2: 180 56% 75%; /* Bluer */
-    --chart-3: 123 48% 65%; /* #81C784 - A contrasting green */
-    --chart-4: 288 47% 70%; /* #D18CDC - A contrasting purple */
-    --chart-5: 187 67% 41%; /* #26C6DA - A contrasting teal */
+    --chart-1: 340 80% 80%;  /* Pink */
+    --chart-2: 140 50% 75%;  /* Green */
+    --chart-3: 260 80% 85%;  /* Violet */
+    --chart-4: 40 90% 75%;   /* A contrasting orange */
+    --chart-5: 190 70% 70%;  /* A contrasting teal */
   }
 
   .dark {
