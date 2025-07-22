@@ -1,6 +1,6 @@
 
 "use client";
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import {
     Card,
     CardContent,
@@ -21,25 +21,56 @@ import { Badge } from "@/components/ui/badge";
 import { useSettleSmart } from "@/context/settle-smart-context";
 import { format, formatDistanceToNow } from "date-fns";
 import { formatCurrency } from "@/lib/utils";
+import { Input } from './ui/input';
+import { Search } from 'lucide-react';
 
 export function RecentExpenses() {
     const { expenses, findUserById, groups, currentUser } = useSettleSmart();
-
-    const sortedExpenses = useMemo(() => {
-        return [...expenses].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    }, [expenses]);
+    const [searchTerm, setSearchTerm] = useState('');
 
     const getGroupName = (groupId: string | null) => {
         if (!groupId) return 'Personal Expense';
         return groups.find(g => g.id === groupId)?.name || 'N/A';
     }
 
+    const filteredExpenses = useMemo(() => {
+        const sorted = [...expenses].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        if (!searchTerm) {
+            return sorted;
+        }
+        return sorted.filter(expense => {
+            const paidByUser = findUserById(expense.paidById);
+            const groupName = getGroupName(expense.groupId);
+            const searchLower = searchTerm.toLowerCase();
+
+            return (
+                expense.description.toLowerCase().includes(searchLower) ||
+                expense.category.toLowerCase().includes(searchLower) ||
+                (paidByUser && paidByUser.name.toLowerCase().includes(searchLower)) ||
+                groupName.toLowerCase().includes(searchLower)
+            );
+        });
+    }, [expenses, searchTerm, findUserById, groups]);
+
 
     return (
         <Card className="h-full">
             <CardHeader>
-                <CardTitle>Recent Activity</CardTitle>
-                <CardDescription>A log of all recent expenses across your groups.</CardDescription>
+                <div className="flex sm:flex-row flex-col sm:items-center justify-between gap-4">
+                    <div>
+                        <CardTitle>Recent Activity</CardTitle>
+                        <CardDescription>A log of all recent expenses across your groups.</CardDescription>
+                    </div>
+                    <div className="relative">
+                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input 
+                            placeholder="Search expenses..."
+                            className="pl-10 w-full sm:w-[250px]"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                        />
+                    </div>
+                </div>
             </CardHeader>
             <CardContent>
                 <Table>
@@ -52,14 +83,14 @@ export function RecentExpenses() {
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {sortedExpenses.length === 0 && (
+                        {filteredExpenses.length === 0 && (
                             <TableRow>
                                 <TableCell colSpan={5} className="h-24 text-center">
-                                No expenses yet. Add one to get started!
+                                {searchTerm ? `No results for "${searchTerm}"` : "No expenses yet. Add one to get started!"}
                                 </TableCell>
                             </TableRow>
                         )}
-                        {sortedExpenses.slice(0, 15).map(expense => {
+                        {filteredExpenses.slice(0, 15).map(expense => {
                             const paidByUser = findUserById(expense.paidById);
                             return (
                                 <TableRow key={expense.id}>

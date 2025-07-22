@@ -15,6 +15,7 @@ const EmailReminderInputSchema = z.object({
   friend: z.any().describe("The user who owes the money."),
   expense: z.any().describe('The specific expense that is outstanding.'),
   amountOwed: z.number().describe('The specific amount owed for this expense.'),
+  daysOverdue: z.number().describe('How many days the debt has been outstanding.'),
 });
 export type EmailReminderInput = z.infer<typeof EmailReminderInputSchema>;
 
@@ -40,12 +41,18 @@ const prompt = ai.definePrompt({
   2.  **Be Clear:** Gently remind the person how much they owe and what it was for.
   3.  **Be Funny (but not mean):** A little humor goes a long way. The goal is to get the money back without ruining a friendship.
   4.  **Create a good subject line:** It should be catchy and not sound like a bill.
+  5.  **Scale the tone:** Adjust the urgency and humor based on how long the debt has been overdue.
+      - 1-3 days overdue: Super chill, no-pressure vibe.
+      - 4-10 days overdue: Still friendly, but a little more direct. A bit more playful humor.
+      - 11-20 days overdue: Getting a bit more serious, but still lighthearted. Maybe a funny threat about sending virtual loan sharks.
+      - 21+ days overdue: Maximum funny urgency. It's been a while, so it's okay to be more dramatic and humorous about it.
 
   **Data Context:**
   - Person sending reminder (currentUser): {{{json currentUser}}}
   - Person who owes money (friend): {{{json friend}}}
   - The specific expense: {{{json expense}}}
   - Amount this person owes: {{{amountOwed}}}
+  - Days this has been overdue: {{{daysOverdue}}}
 
   Based on the data, generate a subject and body for the reminder email.
   `,
