@@ -20,9 +20,22 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { useSettleSmart } from "@/context/settle-smart-context";
 import { format, formatDistanceToNow } from "date-fns";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, cn } from "@/lib/utils";
 import { Input } from './ui/input';
-import { Search } from 'lucide-react';
+import { Search, Utensils, Plane, Film, Lightbulb, Home, ShoppingCart, Package } from 'lucide-react';
+
+const categoryIcons: { [key: string]: React.ReactNode } = {
+  'Food & Drink': <Utensils className="h-5 w-5 text-muted-foreground" />,
+  'Travel': <Plane className="h-5 w-5 text-muted-foreground" />,
+  'Entertainment': <Film className="h-5 w-5 text-muted-foreground" />,
+  'Utilities': <Lightbulb className="h-5 w-5 text-muted-foreground" />,
+  'Rent': <Home className="h-5 w-5 text-muted-foreground" />,
+  'Groceries': <ShoppingCart className="h-5 w-5 text-muted-foreground" />,
+  'Shopping': <ShoppingCart className="h-5 w-5 text-muted-foreground" />,
+  'Other': <Package className="h-5 w-s5 text-muted-foreground" />,
+};
+
+const LARGE_EXPENSE_THRESHOLD = 1000;
 
 export function RecentExpenses() {
     const { expenses, findUserById, groups, currentUser } = useSettleSmart();
@@ -92,14 +105,16 @@ export function RecentExpenses() {
                         )}
                         {filteredExpenses.slice(0, 15).map(expense => {
                             const paidByUser = findUserById(expense.paidById);
+                            const categoryIcon = categoryIcons[expense.category] || categoryIcons['Other'];
+                            const isLargeExpense = expense.amount >= LARGE_EXPENSE_THRESHOLD;
+
                             return (
                                 <TableRow key={expense.id}>
                                     <TableCell>
                                         <div className="flex items-center gap-3">
-                                            <Avatar className="hidden h-9 w-9 sm:flex">
-                                                <AvatarImage src={paidByUser?.avatar} alt={paidByUser?.name} />
-                                                <AvatarFallback>{paidByUser?.initials}</AvatarFallback>
-                                            </Avatar>
+                                            <div className="p-2 bg-muted rounded-full hidden sm:flex">
+                                                {categoryIcon}
+                                            </div>
                                             <div className="grid gap-0.5">
                                                     <div className="font-medium">{expense.description}</div>
                                                 <div className="text-sm text-muted-foreground">
@@ -117,7 +132,9 @@ export function RecentExpenses() {
                                             <span className="text-xs text-muted-foreground">{formatDistanceToNow(new Date(expense.date), { addSuffix: true })}</span>
                                         </div>
                                     </TableCell>
-                                    <TableCell className="text-right font-medium">{formatCurrency(expense.amount)}</TableCell>
+                                    <TableCell className={cn("text-right font-medium", isLargeExpense && "text-destructive font-bold")}>
+                                        {formatCurrency(expense.amount)}
+                                    </TableCell>
                                 </TableRow>
                             )
                         })}
