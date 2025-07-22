@@ -33,6 +33,7 @@ import {
   DialogTitle,
   DialogTrigger,
   DialogClose,
+  DialogFooter,
 } from "@/components/ui/dialog"
 import { TrustScoreIndicator } from "@/components/trust-score-indicator";
 import { formatCurrency, cn } from "@/lib/utils";
@@ -194,7 +195,7 @@ export default function FriendsPage() {
         });
         
         history.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-        return { netBalance: balance, transactionHistory: history, unsettledExpenseIds: unsettledIds };
+        return { netBalance: balance, transactionHistory: history, unsettledExpenseIds: unsettledExpenseIds };
 
     }, [currentUser, friend, expenses]);
 
@@ -511,3 +512,5 @@ export default function FriendsPage() {
     </>
   );
 }
+
+    
