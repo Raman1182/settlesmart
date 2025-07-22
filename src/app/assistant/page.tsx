@@ -103,7 +103,7 @@ export default function AssistantPage() {
                         {messages.length === 0 && (
                             <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground pt-16">
                                 <Sparkles className="h-12 w-12 mb-4 text-primary/50" />
-                                <h3 className="text-xl font-bold">Welcome to your Smart Assistant</h3>
+                                <h3 className="text-xl font-bold font-heading">Welcome to your Smart Assistant</h3>
                                 <p className="max-w-md">Ask me anything about your expenses, groups, or balances. For example: "How much did I spend on food last month?"</p>
                             </div>
                         )}

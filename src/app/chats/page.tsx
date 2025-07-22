@@ -84,7 +84,7 @@ export default function ChatsPage() {
                             {sortedChats.length === 0 && (
                                 <div className="col-span-full flex flex-col items-center justify-center text-center text-muted-foreground h-full rounded-lg border-2 border-dashed border-muted/50 py-12">
                                     <MessageSquarePlus className="h-10 w-10 mb-4" />
-                                    <h3 className="text-xl font-bold mb-2">No chats yet</h3>
+                                    <h3 className="text-xl font-bold font-heading mb-2">No chats yet</h3>
                                     <p className="mb-4">Add some friends to start chatting and settling up!</p>
                                     <button onClick={() => router.push('/friends')} className="text-primary hover:underline">Go to Friends</button>
                                 </div>

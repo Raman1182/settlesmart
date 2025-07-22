@@ -78,7 +78,7 @@ export default function GroupsPage() {
 
         {userGroups.length === 0 && (
           <div className="flex flex-col items-center justify-center text-center text-muted-foreground h-full rounded-lg border-2 border-dashed border-muted/50 py-12">
-            <h3 className="text-xl font-bold mb-2">No groups yet</h3>
+            <h3 className="text-xl font-bold font-heading mb-2">No groups yet</h3>
             <p className="mb-4">Create a group to start sharing expenses, or ask a friend to add you to one!</p>
             <CreateGroupDialog>
                 <Button>
@@ -104,5 +104,3 @@ export default function GroupsPage() {
     </div>
   );
 }
-
-    

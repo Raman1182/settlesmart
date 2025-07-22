@@ -343,7 +343,7 @@ export default function FriendsPage() {
                         )})}
                          {friends.length === 0 && (
                             <div className="col-span-full flex flex-col items-center justify-center text-center text-muted-foreground h-full rounded-lg border-2 border-dashed border-muted/50 py-12">
-                                <h3 className="text-xl font-bold mb-2">It's quiet in here...</h3>
+                                <h3 className="text-xl font-bold font-heading mb-2">It's quiet in here...</h3>
                                 <p className="mb-4">Add an expense with someone, or find them in "Discover" to get the party started.</p>
                             </div>
                         )}
@@ -380,7 +380,7 @@ export default function FriendsPage() {
                           ))}
                            {friendRequests.length === 0 && (
                               <div className="col-span-full flex flex-col items-center justify-center text-center text-muted-foreground h-full rounded-lg border-2 border-dashed border-muted/50 py-12">
-                                  <h3 className="text-xl font-bold mb-2">No new requests</h3>
+                                  <h3 className="text-xl font-bold font-heading mb-2">No new requests</h3>
                                   <p className="mb-4">Your social circle is up to date. For now.</p>
                               </div>
                           )}
@@ -427,7 +427,7 @@ export default function FriendsPage() {
                             })}
                             {otherUsers.length === 0 && (
                                 <div className="col-span-full flex flex-col items-center justify-center text-center text-muted-foreground h-full rounded-lg border-2 border-dashed border-muted/50 py-12">
-                                    <h3 className="text-xl font-bold mb-2">Wow, you know everyone!</h3>
+                                    <h3 className="text-xl font-bold font-heading mb-2">Wow, you know everyone!</h3>
                                     <p className="mb-4">There are no other SettleSmart users to add right now.</p>
                                 </div>
                             )}
@@ -477,7 +477,7 @@ export default function FriendsPage() {
                 {vibeCheckResult && (
                     <div className="space-y-4">
                         <div className="text-center p-4 bg-muted/50 rounded-lg">
-                            <p className="text-2xl font-bold">{vibeCheckResult.vibe}</p>
+                            <p className="text-2xl font-bold font-heading">{vibeCheckResult.vibe}</p>
                             <p className="text-sm text-muted-foreground">{vibeCheckResult.summary}</p>
                         </div>
                         <div className="grid grid-cols-2 gap-4 text-sm">
@@ -512,6 +512,3 @@ export default function FriendsPage() {
     </>
   );
 }
-
-    
-    

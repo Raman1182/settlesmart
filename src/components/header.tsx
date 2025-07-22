@@ -33,7 +33,7 @@ export function Header({ pageTitle = "Dashboard" }: HeaderProps) {
     return (
         <header className="flex h-16 items-center gap-4 border-b bg-background/95 backdrop-blur-sm px-4 lg:px-6 sticky top-0 z-30">
           <div className="w-full flex-1">
-             <h1 className="text-lg font-semibold md:text-xl">{pageTitle}</h1>
+             <h1 className="text-lg font-semibold md:text-xl font-heading">{pageTitle}</h1>
           </div>
           <div className="flex flex-1 items-center justify-end gap-2 md:gap-4">
               <Button variant="outline" className="gap-2 text-muted-foreground pr-2 hidden md:flex" onClick={() => setCommandMenuOpen(true)}>
@@ -83,5 +83,3 @@ export function Header({ pageTitle = "Dashboard" }: HeaderProps) {
         </header>
     );
 }
-
-    

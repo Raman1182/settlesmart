@@ -154,7 +154,7 @@ export default function ChatPage() {
                     <AvatarImage src={friend.avatar} alt={friend.name} />
                     <AvatarFallback>{friend.initials}</AvatarFallback>
                 </Avatar>
-                <h1 className="text-xl font-bold">{friend.name}</h1>
+                <h1 className="text-xl font-bold font-heading">{friend.name}</h1>
             </div>
             <div className="flex-1" />
             {friendOwesMe && (

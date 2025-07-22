@@ -32,7 +32,7 @@ export default function GroupDetailsPage() {
   const group = useMemo(() => groups.find(g => g.id === groupId), [groups, groupId]);
 
   const groupBalances = useMemo(() => {
-    if (!group) return { total: 0, settled: 0, progress: 0, remaining: 0, memberBalances: {} };
+    if (!group) return { total: 0, settled: 0, remaining: 0, progress: 0, memberBalances: {} };
     return getGroupBalances(group.id);
   }, [group, getGroupBalances]);
   
@@ -106,7 +106,7 @@ export default function GroupDetailsPage() {
                   <div className="p-3 bg-muted rounded-full">
                       <Users className="h-6 w-6 text-primary" />
                   </div>
-                  <h1 className="text-xl md:text-2xl font-bold flex-1">{group.name}</h1>
+                  <h1 className="text-xl md:text-2xl font-bold flex-1 font-heading">{group.name}</h1>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="icon">
@@ -270,5 +270,3 @@ export default function GroupDetailsPage() {
         </div>
   );
 }
-
-    

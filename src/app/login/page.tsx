@@ -50,7 +50,7 @@ export default function LoginPage() {
            <div className="mx-auto bg-primary/20 p-3 rounded-full mb-4">
              <Sparkles className="h-8 w-8 text-primary" />
            </div>
-          <CardTitle className="text-2xl">{isSignUp ? "Create an Account" : "Welcome Back!"}</CardTitle>
+          <CardTitle className="text-2xl font-heading">{isSignUp ? "Create an Account" : "Welcome Back!"}</CardTitle>
           <CardDescription>
             {isSignUp ? "Join SettleSmart to start managing expenses." : "Sign in to access your dashboard."}
           </CardDescription>
