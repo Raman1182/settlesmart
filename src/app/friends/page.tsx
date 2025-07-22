@@ -195,7 +195,7 @@ export default function FriendsPage() {
         });
         
         history.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-        return { netBalance: balance, transactionHistory: history, unsettledExpenseIds: unsettledExpenseIds };
+        return { netBalance: balance, transactionHistory: history, unsettledExpenseIds: unsettledIds };
 
     }, [currentUser, friend, expenses]);
 
@@ -513,4 +513,5 @@ export default function FriendsPage() {
   );
 }
 
+    
     
