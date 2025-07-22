@@ -4,40 +4,38 @@
 
 @layer base {
   :root {
-    /* Base Backgrounds */
-    --background: 0 0% 7%; /* #121212 */
-    --foreground: 0 0% 93%; /* #EDEDED */
+    /* Base Palette (Light Mode) */
+    --background: 220 60% 98%; /* #F5F7FB */
+    --foreground: 0 0% 13%; /* #212121 */
 
-    /* Cards & Panels */
-    --card: 0 0% 12%; /* #1E1E1E */
-    --card-foreground: 0 0% 93%; /* #EDEDED */
-    
-    --popover: 0 0% 16%; /* #2A2A2A */
-    --popover-foreground: 0 0% 93%;
+    --card: 0 0% 100%; /* #FFFFFF */
+    --card-foreground: 0 0% 26%; /* #424242 */
 
-    /* Primary Accent */
-    --primary: 263 100% 67%; /* #A259FF - Purple Blaze */
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 13%;
+
+    /* Primary Accent (Electric Teal) */
+    --primary: 170 100% 37%; /* #00BFA6 */
     --primary-foreground: 0 0% 100%;
 
-    /* Secondary / Muted */
-    --secondary: 0 0% 23%; /* #3A3A3A */
-    --secondary-foreground: 0 0% 93%;
+    --secondary: 220 33% 96%; /* #F0F2F5 */
+    --secondary-foreground: 0 0% 26%;
 
-    --muted: 0 0% 23%;
-    --muted-foreground: 0 0% 69%; /* #B0B0B0 */
+    --muted: 220 33% 96%;
+    --muted-foreground: 0 0% 53%; /* #888888 */
 
-    /* Accent (used for hovers, etc.) */
-    --accent: 263 100% 67%;
-    --accent-foreground: 0 0% 100%;
-
+    /* Accent */
+    --accent: 220 33% 96%;
+    --accent-foreground: 0 0% 13%;
+    
     /* Semantic Colors */
-    --destructive: 1 82% 63%; /* #EF5350 - Negative Balance */
-    --destructive-foreground: 0 0% 98%;
-
+    --destructive: 1 82% 63%; /* #EF5350 */
+    --destructive-foreground: 0 0% 100%;
+    
     /* Borders & Inputs */
-    --border: 0 0% 20%; /* #333333 */
-    --input: 0 0% 23%; /* #3A3A3A */
-    --ring: 263 100% 67%;
+    --border: 0 0% 88%; /* #E0E0E0 */
+    --input: 0 0% 88%;
+    --ring: 170 100% 37%;
 
     --radius: 0.75rem;
 
