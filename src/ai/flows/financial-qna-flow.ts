@@ -1,4 +1,3 @@
-
 'use server';
 /**
  * @fileOverview An AI agent that can answer questions about a user's financial data.
@@ -39,7 +38,7 @@ export type FinancialQnAOutput = z.infer<typeof FinancialQnAOutputSchema>;
 
 export async function answerFinancialQuestion(
   input: FinancialQnAInput
-): Promise<FinancialQnAOutput> {
+): Promise<AsyncGenerator<string>> {
   return financialQnAFlow(input);
 }
 
@@ -80,10 +79,20 @@ const financialQnAFlow = ai.defineFlow(
   {
     name: 'financialQnAFlow',
     inputSchema: FinancialQnAInputSchema,
-    outputSchema: FinancialQnAOutputSchema,
+    outputSchema: z.string(),
   },
-  async input => {
-    const {output} = await prompt(input);
-    return output!;
+  async function* (input) {
+    const {stream} = ai.generateStream({
+      prompt: prompt.render(input)!,
+      output: {
+        schema: FinancialQnAOutputSchema,
+      },
+    });
+
+    for await (const chunk of stream) {
+      if (chunk.output?.answer) {
+        yield chunk.output.answer;
+      }
+    }
   }
 );

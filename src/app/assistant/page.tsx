@@ -22,6 +22,56 @@ interface Message {
 
 const HISTORY_LIMIT = 6; // Keep the last 6 messages (3 user, 3 AI)
 
+const useTypingAnimation = (text: string) => {
+    const [displayText, setDisplayText] = useState("");
+    const [words, setWords] = useState<string[]>([]);
+
+    useEffect(() => {
+        if (text) {
+            setWords(text.split(' '));
+        }
+    }, [text]);
+
+    useEffect(() => {
+        if (words.length > 0) {
+            const timer = setInterval(() => {
+                setDisplayText(prev => {
+                    const wordIndex = prev.split(' ').length -1;
+                    if(wordIndex < words.length - 1) {
+                         return `${prev} ${words[wordIndex]}`;
+                    }
+                    if(wordIndex === words.length - 1) {
+                         return words.join(' ');
+                    }
+                    return words[0]
+                });
+            }, 100);
+            return () => clearInterval(timer);
+        }
+    }, [words]);
+    
+    const isComplete = displayText === text;
+
+    return { displayText: isComplete ? text : displayText, isComplete };
+}
+
+
+const AIMessage = ({ message }: { message: Message }) => {
+    const { displayText } = useTypingAnimation(message.text);
+    return (
+        <div
+            className={cn(
+            "max-w-sm md:max-w-md rounded-xl px-4 py-3 text-sm whitespace-pre-wrap",
+            "bg-muted"
+            )}
+        >
+            {displayText}
+            <span className="animate-pulse">▍</span>
+        </div>
+    )
+}
+
+
 export default function AssistantPage() {
   const { expenses, groups, users, balances, currentUser } = useSettleSmart();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -67,18 +117,22 @@ export default function AssistantPage() {
       try {
         const history = currentMessages.slice(-HISTORY_LIMIT).map(({ id, isLoading, ...rest}) => rest);
         const context = { expenses, groups, users, balances, currentUser };
-        const result = await answerFinancialQuestion({
+        const stream = await answerFinancialQuestion({
           question: currentInput,
           history,
           context,
         });
-        
-        const aiResponseMessage: Message = {
-            id: `msg-${Date.now()}-response`,
-            text: result.answer,
-            sender: "ai",
+
+        let fullText = "";
+
+        for await (const chunk of stream) {
+            fullText += chunk;
+             setMessages((prev) => {
+                const lastMessage = prev[prev.length - 1];
+                const updatedLastMessage = { ...lastMessage, text: fullText, isLoading: false };
+                return [...prev.slice(0, -1), updatedLastMessage];
+            });
         }
-        setMessages((prev) => [...prev.slice(0, -1), aiResponseMessage]);
 
       } catch (error) {
         console.error("AI query failed:", error);
@@ -120,21 +174,25 @@ export default function AssistantPage() {
                                     <AvatarFallback><Sparkles className="w-4 h-4" /></AvatarFallback>
                                 </Avatar>
                             )}
-                            <div
-                                className={cn(
-                                "max-w-sm md:max-w-md rounded-xl px-4 py-3 text-sm whitespace-pre-wrap",
-                                message.sender === "user"
-                                    ? "bg-primary text-primary-foreground"
-                                    : "bg-muted"
-                                )}
-                            >
-                               {message.isLoading ? (
-                                    <div className="flex items-center gap-2">
+                            {message.sender === 'user' ? (
+                                <div
+                                    className={cn(
+                                    "max-w-sm md:max-w-md rounded-xl px-4 py-3 text-sm whitespace-pre-wrap",
+                                    "bg-primary text-primary-foreground"
+                                    )}
+                                >
+                                    {message.text}
+                                </div>
+                            ) : (
+                                message.isLoading ? (
+                                    <div className="flex items-center gap-2 bg-muted rounded-xl px-4 py-3 text-sm">
                                         <Loader2 className="w-4 h-4 animate-spin"/>
                                         <span>Thinking...</span>
                                     </div>
-                                ) : message.text}
-                            </div>
+                                ) : (
+                                    <AIMessage message={message} />
+                                )
+                            )}
                              {message.sender === "user" && (
                                  <Avatar className="w-8 h-8">
                                     <AvatarImage src={currentUser.avatar} alt={currentUser.name} />
