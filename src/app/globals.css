@@ -4,71 +4,86 @@
 
 @layer base {
   :root {
-    --background: 0 0% 0%; /* #000000 */
-    --foreground: 0 0% 100%; /* #FFFFFF */
+    /* Base Backgrounds */
+    --background: 0 0% 7%; /* #121212 */
+    --foreground: 0 0% 93%; /* #EDEDED */
+
+    /* Cards & Panels */
+    --card: 0 0% 12%; /* #1E1E1E */
+    --card-foreground: 0 0% 93%; /* #EDEDED */
     
-    --card: 0 0% 6.7%; /* #111111 */
-    --card-foreground: 0 0% 98%;
+    --popover: 0 0% 16%; /* #2A2A2A */
+    --popover-foreground: 0 0% 93%;
 
-    --popover: 0 0% 6.7%;
-    --popover-foreground: 0 0% 98%;
-
-    --primary: 180 100% 50%; /* #008080 - Teal */
+    /* Primary Accent */
+    --primary: 263 100% 67%; /* #A259FF - Purple Blaze */
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 0 0% 15%;
-    --secondary-foreground: 0 0% 98%;
+    /* Secondary / Muted */
+    --secondary: 0 0% 23%; /* #3A3A3A */
+    --secondary-foreground: 0 0% 93%;
 
-    --muted: 0 0% 15%;
-    --muted-foreground: 0 0% 63.9%; /* #aaaaaa */
+    --muted: 0 0% 23%;
+    --muted-foreground: 0 0% 69%; /* #B0B0B0 */
 
-    --accent: 180 84% 45%; /* #006969 - Darker Teal */
+    /* Accent (used for hovers, etc.) */
+    --accent: 263 100% 67%;
     --accent-foreground: 0 0% 100%;
 
-    --destructive: 0 100% 70%; /* #ff6b6b */
+    /* Semantic Colors */
+    --destructive: 1 82% 63%; /* #EF5350 - Negative Balance */
     --destructive-foreground: 0 0% 98%;
 
-    --border: 0 0% 15%;
-    --input: 0 0% 15%;
-    --ring: 180 100% 50%;
+    /* Borders & Inputs */
+    --border: 0 0% 20%; /* #333333 */
+    --input: 0 0% 23%; /* #3A3A3A */
+    --ring: 263 100% 67%;
 
     --radius: 0.75rem;
 
-    --chart-1: 180 100% 50%;
-    --chart-2: 271 76% 54%;
-    --chart-3: 153 100% 50%;
-    --chart-4: 0 100% 70%;
-    --chart-5: 48 100% 50%;
+    /* Chart Colors */
+    --chart-1: 34 100% 62%;  /* #FFB74D - Food */
+    --chart-2: 204 94% 64%; /* #4FC3F7 - Travel */
+    --chart-3: 123 48% 65%; /* #81C784 - Utilities */
+    --chart-4: 288 47% 60%; /* #BA68C8 - Subscriptions */
+    --chart-5: 187 67% 41%; /* #26C6DA - Settled */
   }
 
   .dark {
-    --background: 0 0% 0%; /* #000000 */
-    --foreground: 0 0% 100%; /* #FFFFFF */
+    /* Base Backgrounds */
+    --background: 0 0% 7%; /* #121212 */
+    --foreground: 0 0% 93%; /* #EDEDED */
+
+    /* Cards & Panels */
+    --card: 0 0% 12%; /* #1E1E1E */
+    --card-foreground: 0 0% 93%; /* #EDEDED */
     
-    --card: 0 0% 6.7%; /* #111111 */
-    --card-foreground: 0 0% 98%;
+    --popover: 0 0% 16%; /* #2A2A2A */
+    --popover-foreground: 0 0% 93%;
 
-    --popover: 0 0% 6.7%;
-    --popover-foreground: 0 0% 98%;
-
-    --primary: 180 100% 50%; /* #008080 - Teal */
+    /* Primary Accent */
+    --primary: 263 100% 67%; /* #A259FF - Purple Blaze */
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 0 0% 15%;
-    --secondary-foreground: 0 0% 98%;
+    /* Secondary / Muted */
+    --secondary: 0 0% 23%; /* #3A3A3A */
+    --secondary-foreground: 0 0% 93%;
 
-    --muted: 0 0% 15%;
-    --muted-foreground: 0 0% 63.9%; /* #aaaaaa */
+    --muted: 0 0% 23%;
+    --muted-foreground: 0 0% 69%; /* #B0B0B0 */
 
-    --accent: 180 84% 45%; /* #006969 - Darker Teal */
+    /* Accent (used for hovers, etc.) */
+    --accent: 263 100% 67%;
     --accent-foreground: 0 0% 100%;
-
-    --destructive: 0 100% 70%; /* #ff6b6b */
+    
+    /* Semantic Colors */
+    --destructive: 1 82% 63%; /* #EF5350 - Negative Balance */
     --destructive-foreground: 0 0% 98%;
 
-    --border: 0 0% 15%;
-    --input: 0 0% 15%;
-    --ring: 180 100% 50%;
+    /* Borders & Inputs */
+    --border: 0 0% 20%; /* #333333 */
+    --input: 0 0% 23%; /* #3A3A3A */
+    --ring: 263 100% 67%;
   }
 }
 
