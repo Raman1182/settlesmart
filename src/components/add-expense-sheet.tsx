@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useTransition, useEffect, useMemo } from "react";
+import { useState, useTransition, useEffect, useMemo, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -29,17 +29,19 @@ import { z } from "zod";
 import { useSettleSmart } from "@/context/settle-smart-context";
 import { parseExpense } from "@/ai/flows/parse-expense-from-natural-language";
 import { categorizeExpense } from "@/ai/flows/categorize-expense";
-import { DollarSign, Loader2, Plus, Sparkles, Camera, Equal, Repeat } from "lucide-react";
+import { suggestFriendsForExpense } from "@/ai/flows/suggest-friends-flow";
+import { DollarSign, Loader2, Plus, Sparkles, Camera, Equal, Repeat, UserCheck } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { Checkbox } from "./ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
-import type { User, Participant } from "@/lib/types";
+import type { User, Participant, Expense } from "@/lib/types";
 import { SheetTrigger } from "./ui/sheet";
 import { Badge } from "./ui/badge";
 import { ToggleGroup, ToggleGroupItem } from "./ui/toggle-group";
 import { Switch } from "./ui/switch";
 import { Label } from "@/components/ui/label";
+import { debounce } from "lodash";
 
 const splitSchema = z.object({
   participantId: z.string(),
@@ -82,11 +84,13 @@ export function AddExpenseSheet({ children, open, onOpenChange }: AddExpenseShee
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [nlInput, setNlInput] = useState("");
   const [isParsing, startParsingTransition] = useTransition();
+  const [isSuggesting, startSuggestionTransition] = useTransition();
   const [isSubmitting, startSubmittingTransition] = useTransition();
-  const { addExpense, users, currentUser, groups, findUserById, addAdHocUser } = useSettleSmart();
+  const { addExpense, users, currentUser, groups, findUserById, addAdHocUser, friendships, expenses } = useSettleSmart();
   const { toast } = useToast();
   
   const [adHocParticipants, setAdHocParticipants] = useState<string[]>([]);
+  const [suggestedFriendIds, setSuggestedFriendIds] = useState<string[]>([]);
   
   const controlledOpen = open !== undefined ? open : isSheetOpen;
   const setControlledOpen = onOpenChange !== undefined ? onOpenChange : setIsSheetOpen;
@@ -114,6 +118,45 @@ export function AddExpenseSheet({ children, open, onOpenChange }: AddExpenseShee
   const splitType = form.watch("splitType");
   const totalAmount = form.watch("amount");
   const unequalSplits = form.watch("unequalSplits");
+  const description = form.watch("description");
+
+  const friends = useMemo(() => {
+    if (!currentUser) return [];
+    const friendIds = friendships
+      .filter(f => f.status === 'accepted')
+      .map(f => f.requesterId === currentUser.id ? f.receiverId : f.requesterId);
+    return users.filter(u => friendIds.includes(u.id));
+  }, [currentUser, friendships, users]);
+
+  const debouncedSuggestFriends = useCallback(
+    debounce((desc: string) => {
+        if (desc.length < 3 || !currentUser) {
+            setSuggestedFriendIds([]);
+            return;
+        }
+        startSuggestionTransition(async () => {
+            try {
+                const result = await suggestFriendsForExpense({
+                    expenseDescription: desc,
+                    friends,
+                    pastExpenses: expenses,
+                    currentUser
+                });
+                setSuggestedFriendIds(result.suggestedFriendIds);
+                if (result.suggestedFriendIds.length > 0) {
+                     toast({ title: "We have suggestions!", description: "Highlighted some friends you usually split this with." });
+                }
+            } catch (error) {
+                console.error("Failed to get friend suggestions:", error);
+                // Don't bother user with a toast for this, just fail silently.
+            }
+        });
+    }, 1000), 
+  [friends, expenses, currentUser, toast]);
+
+  useEffect(() => {
+    debouncedSuggestFriends(description);
+  }, [description, debouncedSuggestFriends]);
 
   useEffect(() => {
     if (currentUser && controlledOpen) {
@@ -243,6 +286,9 @@ export function AddExpenseSheet({ children, open, onOpenChange }: AddExpenseShee
     if (selectedGroupId) {
         const group = groups.find(g => g.id === selectedGroupId);
         group?.members.map(id => findUserById(id)).filter(Boolean).forEach(u => addParticipant(u as User));
+    } else {
+        // If no group, add all friends as options
+        friends.forEach(f => addParticipant(f));
     }
     
     // Then add any other participants (from NL input or manual)
@@ -255,13 +301,13 @@ export function AddExpenseSheet({ children, open, onOpenChange }: AddExpenseShee
         }
     });
     
-    // Always ensure current user is an option if not in the group
+    // Always ensure current user is an option
     if (currentUser && !addedIds.has(currentUser.id)) {
         addParticipant(currentUser);
     }
     
     return participantList;
-  }, [selectedGroupId, groups, findUserById, splitWith, adHocParticipants, currentUser]);
+  }, [selectedGroupId, groups, findUserById, splitWith, adHocParticipants, currentUser, friends]);
 
   const payerOptions = useMemo(() => {
     return participantsToDisplay.filter(p => !('isAdHoc' in p)) as User[];
@@ -287,6 +333,7 @@ export function AddExpenseSheet({ children, open, onOpenChange }: AddExpenseShee
       });
       setNlInput("");
       setAdHocParticipants([]);
+      setSuggestedFriendIds([]);
   }
 
   return (
@@ -425,9 +472,12 @@ export function AddExpenseSheet({ children, open, onOpenChange }: AddExpenseShee
                     name="splitWith"
                     render={() => (
                     <FormItem>
-                        <div>
-                            <FormLabel className="text-base">Split between</FormLabel>
-                            <FormDescription>Pick who's in on this expense.</FormDescription>
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <FormLabel className="text-base">Split between</FormLabel>
+                                <FormDescription>Pick who's in on this expense.</FormDescription>
+                            </div>
+                             {isSuggesting && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
                         </div>
                         <div className="space-y-3 pt-2">
                         {participantsToDisplay.map((item) => (
@@ -436,10 +486,11 @@ export function AddExpenseSheet({ children, open, onOpenChange }: AddExpenseShee
                             control={form.control}
                             name="splitWith"
                             render={({ field }) => {
+                                const isSuggested = suggestedFriendIds.includes(item.id);
                                 return (
                                 <FormItem
                                     key={item.id}
-                                    className="flex flex-row items-center space-x-3 space-y-0 p-2 rounded-md transition-colors hover:bg-muted/50"
+                                    className={`flex flex-row items-center space-x-3 space-y-0 p-2 rounded-md transition-colors hover:bg-muted/50 ${isSuggested ? 'bg-primary/10 border border-dashed border-primary/50' : ''}`}
                                 >
                                     <FormControl>
                                     <Checkbox
@@ -464,9 +515,10 @@ export function AddExpenseSheet({ children, open, onOpenChange }: AddExpenseShee
                                                 <AvatarImage src={item.avatar} alt={item.name} />
                                                 <AvatarFallback>{item.initials}</AvatarFallback>
                                             </Avatar>
-                                            {item.name}
+                                            <span className="flex-1">{item.name}</span>
                                             </>
                                          )}
+                                          {isSuggested && <UserCheck className="h-4 w-4 text-primary" />}
                                     </FormLabel>
                                 </FormItem>
                                 )

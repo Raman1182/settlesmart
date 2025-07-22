@@ -9,6 +9,7 @@ import '@/ai/flows/shopping-list-flow';
 import '@/ai/flows/financial-debrief-flow';
 import '@/ai/flows/friendship-vibe-check-flow.ts';
 import '@/ai/flows/email-reminder-flow.ts';
+import '@/ai/flows/suggest-friends-flow.ts';
 
 
 genkit({
