@@ -35,6 +35,18 @@ const categoryIcons: { [key: string]: React.ReactNode } = {
   'Other': <Package className="h-5 w-s5 text-muted-foreground" />,
 };
 
+const categoryColors: { [key: string]: string } = {
+  'Food & Drink': "bg-amber-100 text-amber-800 border-amber-200",
+  'Travel': "bg-sky-100 text-sky-800 border-sky-200",
+  'Entertainment': "bg-violet-100 text-violet-800 border-violet-200",
+  'Utilities': "bg-lime-100 text-lime-800 border-lime-200",
+  'Rent': "bg-rose-100 text-rose-800 border-rose-200",
+  'Groceries': "bg-green-100 text-green-800 border-green-200",
+  'Shopping': "bg-fuchsia-100 text-fuchsia-800 border-fuchsia-200",
+  'Other': "bg-stone-100 text-stone-800 border-stone-200",
+}
+
+
 const LARGE_EXPENSE_THRESHOLD = 1000;
 
 export function RecentExpenses() {
@@ -107,6 +119,7 @@ export function RecentExpenses() {
                             const paidByUser = findUserById(expense.paidById);
                             const categoryIcon = categoryIcons[expense.category] || categoryIcons['Other'];
                             const isLargeExpense = expense.amount >= LARGE_EXPENSE_THRESHOLD;
+                            const categoryColor = categoryColors[expense.category] || categoryColors['Other'];
 
                             return (
                                 <TableRow key={expense.id}>
@@ -124,7 +137,7 @@ export function RecentExpenses() {
                                         </div>
                                     </TableCell>
                                     <TableCell className="hidden sm:table-cell">
-                                        <Badge variant="secondary">{expense.category}</Badge>
+                                        <Badge variant="outline" className={cn("border", categoryColor)}>{expense.category}</Badge>
                                     </TableCell>
                                     <TableCell className="hidden lg:table-cell">
                                         <div className="flex flex-col">
