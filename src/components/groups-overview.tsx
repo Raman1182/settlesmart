@@ -9,16 +9,20 @@ import { Button } from "./ui/button";
 import { useRouter } from "next/navigation";
 
 export function GroupsOverview() {
-    const { groups, balances } = useSettleSmart();
+    const { groups, balances, currentUser } = useSettleSmart();
     const router = useRouter();
 
     const getGroupBalance = (groupId: string) => {
+        if (!currentUser) return 0;
         let netBalance = 0;
+        // This is a simplified logic. For a real app, you'd iterate through group-specific expenses.
         balances.settlements.forEach(s => {
-            const expenseInGroup = s.from.id !== s.to.id; // Simplified check
-            if(expenseInGroup) {
-                if(s.to.id === useSettleSmart().currentUser?.id) netBalance += s.amount;
-                if(s.from.id === useSettleSmart().currentUser?.id) netBalance -= s.amount;
+            // A proper check would be to see if the expense that created the settlement belongs to this group.
+            // This is a placeholder logic.
+            const isRelatedToGroup = true; // Placeholder
+            if(isRelatedToGroup) {
+                if(s.to.id === currentUser.id) netBalance += s.amount;
+                if(s.from.id === currentUser.id) netBalance -= s.amount;
             }
         });
         return netBalance;
