@@ -7,7 +7,7 @@ import { useSettleSmart } from "@/context/settle-smart-context";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Loader2, Plus, UserPlus, Check, X, UserMinus, MessageSquare, MoreVertical, Shield, History } from "lucide-react";
+import { Loader2, Plus, UserPlus, Check, X, UserMinus, MessageSquare, MoreVertical, Shield, History, Sparkles } from "lucide-react";
 import type { User, Friendship, Expense } from "@/lib/types";
 import { useToast } from "@/components/ui/use-toast";
 import { useRouter } from "next/navigation";
@@ -38,6 +38,7 @@ import { TrustScoreIndicator } from "@/components/trust-score-indicator";
 import { formatCurrency, cn } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { format } from "date-fns";
+import { generateFriendshipVibeCheck, type FriendshipVibeCheckOutput } from "@/ai/flows/friendship-vibe-check-flow";
 
 
 export default function FriendsPage() {
@@ -59,8 +60,10 @@ export default function FriendsPage() {
   const { toast } = useToast();
   const router = useRouter();
   const [isProcessing, startProcessingTransition] = useTransition();
+  const [isCheckingVibe, startVibeCheckTransition] = useTransition();
   const [selectedFriendForScore, setSelectedFriendForScore] = useState<User | null>(null);
   const [selectedFriendForHistory, setSelectedFriendForHistory] = useState<User | null>(null);
+  const [vibeCheckResult, setVibeCheckResult] = useState<FriendshipVibeCheckOutput | null>(null);
 
   useEffect(() => {
     if (!isAuthLoading && !currentUser) {
@@ -148,6 +151,22 @@ export default function FriendsPage() {
       }
     });
   }
+
+  const handleVibeCheck = (friend: User) => {
+    if (!currentUser) return;
+    startVibeCheckTransition(async () => {
+        try {
+            const friendExpenses = expenses.filter(e => {
+                const participants = new Set(e.splitWith);
+                return participants.has(currentUser.id) && participants.has(friend.id);
+            });
+            const result = await generateFriendshipVibeCheck({ currentUser, friend, expenses: friendExpenses });
+            setVibeCheckResult(result);
+        } catch (error) {
+            toast({ variant: "destructive", title: "Vibe check failed!", description: "The AI is being shy. Try again later." });
+        }
+    });
+  };
 
   const TransactionHistoryDialog = () => {
     const friend = selectedFriendForHistory;
@@ -307,7 +326,11 @@ export default function FriendsPage() {
                                     </DropdownMenuItem>
                                     <DropdownMenuItem onSelect={() => setSelectedFriendForScore(friend)}>
                                         <Shield className="mr-2 h-4 w-4" />
-                                        <span>Vibe Check (Trust Score)</span>
+                                        <span>Trust Score</span>
+                                    </DropdownMenuItem>
+                                     <DropdownMenuItem onSelect={() => handleVibeCheck(friend)}>
+                                        <Sparkles className="mr-2 h-4 w-4" />
+                                        <span>AI Vibe Check</span>
                                     </DropdownMenuItem>
                                     <DropdownMenuItem onSelect={() => handleRemoveFriend(friend.id)}>
                                         <UserMinus className="mr-2 h-4 w-4 text-destructive" />
@@ -431,6 +454,58 @@ export default function FriendsPage() {
                 </AlertDialogFooter>
             </AlertDialogContent>
         </AlertDialog>
+
+        <Dialog open={isCheckingVibe || !!vibeCheckResult} onOpenChange={(open) => {
+            if (!open) {
+                setVibeCheckResult(null)
+            }
+        }}>
+            <DialogContent className="max-w-md">
+                <DialogHeader>
+                    <DialogTitle>AI Friendship Vibe Check</DialogTitle>
+                     <DialogDescription>
+                        Here's what the AI thinks about your financial friendship.
+                    </DialogDescription>
+                </DialogHeader>
+                {isCheckingVibe && (
+                    <div className="flex flex-col items-center justify-center gap-4 py-8">
+                        <Loader2 className="h-10 w-10 animate-spin text-primary" />
+                        <p className="text-muted-foreground">Analyzing your financial history...</p>
+                    </div>
+                )}
+                {vibeCheckResult && (
+                    <div className="space-y-4">
+                        <div className="text-center p-4 bg-muted/50 rounded-lg">
+                            <p className="text-2xl font-bold">{vibeCheckResult.vibe}</p>
+                            <p className="text-sm text-muted-foreground">{vibeCheckResult.summary}</p>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4 text-sm">
+                            <div className="p-3 rounded-md bg-muted/30">
+                                <p className="text-muted-foreground">Your Net Balance</p>
+                                <p className={`font-bold ${vibeCheckResult.stats.netBalance > 0 ? 'text-green-500' : 'text-red-500'}`}>
+                                    {formatCurrency(vibeCheckResult.stats.netBalance)}
+                                </p>
+                            </div>
+                            <div className="p-3 rounded-md bg-muted/30">
+                                <p className="text-muted-foreground">Total Shared</p>
+                                <p className="font-bold">{formatCurrency(vibeCheckResult.stats.totalVolume)}</p>
+                            </div>
+                             <div className="p-3 rounded-md bg-muted/30">
+                                <p className="text-muted-foreground">Who Pays More Often?</p>
+                                <p className="font-bold">{vibeCheckResult.stats.whoPaysMore}</p>
+                            </div>
+                            <div className="p-3 rounded-md bg-muted/30">
+                                <p className="text-muted-foreground">Avg. Settlement Time</p>
+                                <p className="font-bold">{vibeCheckResult.stats.avgSettleTimeDays} days</p>
+                            </div>
+                        </div>
+                    </div>
+                )}
+                 <DialogFooter>
+                    <Button onClick={() => setVibeCheckResult(null)}>Got it</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
 
         {selectedFriendForHistory && <TransactionHistoryDialog />}
     </>
