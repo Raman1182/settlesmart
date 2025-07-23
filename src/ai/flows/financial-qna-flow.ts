@@ -80,7 +80,8 @@ export const answerFinancialQuestion = ai.defineFlow(
     });
 
     const {stream} = await ai.generateStream({
-      prompt: prompt.renderText(input)!,
+      prompt,
+      input,
       output: {
         schema: FinancialQnAOutputSchema,
       },
