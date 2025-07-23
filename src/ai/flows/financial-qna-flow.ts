@@ -1,3 +1,4 @@
+
 'use server';
 /**
  * @fileOverview An AI agent that can answer questions about a user's financial data.
@@ -43,6 +44,8 @@ export const answerFinancialQuestion = ai.defineFlow(
     outputSchema: z.string(),
   },
   async function* (input) {
+    console.log("AI FLOW RECEIVED PAYLOAD:", JSON.stringify(input, null, 2));
+
     const prompt = ai.definePrompt({
       name: 'financialQnAPrompt',
       input: {schema: FinancialQnAInputSchema},

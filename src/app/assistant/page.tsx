@@ -92,11 +92,16 @@ export default function AssistantPage() {
       try {
         const history = currentMessages.slice(-HISTORY_LIMIT).map(({ id, isLoading, ...rest}) => rest);
         const context = { expenses, groups, users, balances, currentUser };
-        const stream = await answerFinancialQuestion({
+
+        const payload = {
           question: currentInput,
           history,
           context,
-        });
+        };
+
+        console.log("SENDING PAYLOAD TO AI:", JSON.stringify(payload, null, 2));
+
+        const stream = await answerFinancialQuestion(payload);
 
         let fullText = "";
         let firstChunk = true;
