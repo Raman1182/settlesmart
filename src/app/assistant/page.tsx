@@ -90,7 +90,7 @@ export default function AssistantPage() {
 
     startThinkingTransition(async () => {
       try {
-        const history = currentMessages.slice(-HISTORY_LIMIT).map(({ id, isLoading, ...rest}) => rest);
+        const history = currentMessages.slice(-HISTORY_LIMIT).map(({ id, isLoading, ...rest }) => rest);
         const context = { expenses, groups, users, balances, currentUser };
 
         const payload = {
@@ -107,28 +107,34 @@ export default function AssistantPage() {
         let firstChunk = true;
 
         for await (const chunk of stream) {
-            if (chunk && 'answer' in chunk) {
-              fullText += chunk.answer;
-              setMessages((prev) => {
-                  let lastMessage = prev[prev.length - 1];
-                  if (firstChunk) {
-                      // Replace the "Thinking..." message on the first chunk
-                      lastMessage = { ...lastMessage, text: '', isLoading: false };
-                      firstChunk = false;
-                  }
-                  const updatedLastMessage = { ...lastMessage, text: fullText };
-                  return [...prev.slice(0, -1), updatedLastMessage];
-              });
-            }
+          if (chunk && typeof chunk.answer === "string") {
+            fullText += chunk.answer;
+            setMessages((prev) => {
+              let lastMessage = prev[prev.length - 1];
+              if (firstChunk) {
+                lastMessage = { ...lastMessage, text: "", isLoading: false };
+                firstChunk = false;
+              }
+              const updatedLastMessage = { ...lastMessage, text: fullText };
+              return [...prev.slice(0, -1), updatedLastMessage];
+            });
+          } else {
+            console.warn("Unexpected chunk from AI:", chunk);
+          }
+        }
+
+        // Edge case: if the stream ended but no valid chunks were received
+        if (fullText.trim() === "") {
+          throw new Error("Empty response from AI");
         }
 
       } catch (error) {
         console.error("AI query failed:", error);
         const errorMessage: Message = {
-            id: `msg-${Date.now()}-error`,
-            text: "Sorry, I had trouble connecting to my brain. Please try again.",
-            sender: "ai"
-        }
+          id: `msg-${Date.now()}-error`,
+          text: "⚠️ Oops, my brain hit a bug. Try again in a bit.",
+          sender: "ai",
+        };
         setMessages((prev) => [...prev.slice(0, -1), errorMessage]);
       }
     });
@@ -189,7 +195,7 @@ export default function AssistantPage() {
                                     <AIMessage text={message.text} />
                                 )
                             )}
-                             {message.sender === "user" && (
+                             {message.sender === "user" && currentUser && (
                                  <Avatar className="w-8 h-8">
                                     <AvatarImage src={currentUser.avatar} alt={currentUser.name} />
                                     <AvatarFallback>{currentUser.initials}</AvatarFallback>
