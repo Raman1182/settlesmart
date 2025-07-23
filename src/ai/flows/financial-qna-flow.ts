@@ -79,8 +79,8 @@ export const answerFinancialQuestion = ai.defineFlow(
   `,
     });
 
-    const {stream} = ai.generateStream({
-      prompt: prompt.render(input)!,
+    const {stream} = await ai.generateStream({
+      prompt: prompt.renderText(input)!,
       output: {
         schema: FinancialQnAOutputSchema,
       },
