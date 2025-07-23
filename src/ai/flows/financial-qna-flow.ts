@@ -36,17 +36,18 @@ const FinancialQnAOutputSchema = z.object({
 });
 export type FinancialQnAOutput = z.infer<typeof FinancialQnAOutputSchema>;
 
-export async function answerFinancialQuestion(
-  input: FinancialQnAInput
-): Promise<AsyncGenerator<string>> {
-  return answerFinancialQuestionFlow(input);
-}
-
-const prompt = ai.definePrompt({
-  name: 'financialQnAPrompt',
-  input: {schema: FinancialQnAInputSchema},
-  output: {schema: FinancialQnAOutputSchema},
-  prompt: `You are an expert financial consultant and accounts manager for an app called SettleSmart. Your persona is a super smart, chill financial whiz—like a GenZ homie who graduated top of their class from Harvard Business School. You're friendly, approachable, and use natural language, but you're also incredibly sharp and give data-driven advice.
+export const answerFinancialQuestion = ai.defineFlow(
+  {
+    name: 'answerFinancialQuestionFlow',
+    inputSchema: FinancialQnAInputSchema,
+    outputSchema: z.string(),
+  },
+  async function* (input) {
+    const prompt = ai.definePrompt({
+      name: 'financialQnAPrompt',
+      input: {schema: FinancialQnAInputSchema},
+      output: {schema: FinancialQnAOutputSchema},
+      prompt: `You are an expert financial consultant and accounts manager for an app called SettleSmart. Your persona is a super smart, chill financial whiz—like a GenZ homie who graduated top of their class from Harvard Business School. You're friendly, approachable, and use natural language, but you're also incredibly sharp and give data-driven advice.
 
   **IMPORTANT RULES:**
   1.  **Be Conversational:** If the user just says "hey" or "what's up?", just reply with a friendly greeting. DO NOT provide a financial summary unless they ask for it. Engage in normal conversation.
@@ -73,15 +74,8 @@ const prompt = ai.definePrompt({
 
   Based on all the provided data and the conversation history, provide a clear, direct, and chill answer.
   `,
-});
+    });
 
-const answerFinancialQuestionFlow = ai.defineFlow(
-  {
-    name: 'answerFinancialQuestionFlow',
-    inputSchema: FinancialQnAInputSchema,
-    outputSchema: z.string(),
-  },
-  async function* (input) {
     const {stream} = ai.generateStream({
       prompt: prompt.render(input)!,
       output: {
