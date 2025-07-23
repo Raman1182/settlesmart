@@ -22,42 +22,17 @@ interface Message {
 
 const HISTORY_LIMIT = 6; // Keep the last 6 messages (3 user, 3 AI)
 
-const useTypingAnimation = (text: string) => {
+const AIMessage = ({ text }: { text: string }) => {
+    const [isComplete, setIsComplete] = useState(false);
     const [displayText, setDisplayText] = useState("");
-    const [words, setWords] = useState<string[]>([]);
 
     useEffect(() => {
-        if (text) {
-            setWords(text.split(' '));
-        }
+        setDisplayText(text);
+        // A simple way to check if streaming is "done" for the blinking cursor
+        const timer = setTimeout(() => setIsComplete(true), 200);
+        return () => clearTimeout(timer);
     }, [text]);
 
-    useEffect(() => {
-        if (words.length > 0) {
-            const timer = setInterval(() => {
-                setDisplayText(prev => {
-                    const wordIndex = prev.split(' ').length -1;
-                    if(wordIndex < words.length - 1) {
-                         return `${prev} ${words[wordIndex]}`;
-                    }
-                    if(wordIndex === words.length - 1) {
-                         return words.join(' ');
-                    }
-                    return words[0]
-                });
-            }, 100);
-            return () => clearInterval(timer);
-        }
-    }, [words]);
-    
-    const isComplete = displayText === text;
-
-    return { displayText: isComplete ? text : displayText, isComplete };
-}
-
-
-const AIMessage = ({ message }: { message: Message }) => {
-    const { displayText } = useTypingAnimation(message.text);
     return (
         <div
             className={cn(
@@ -66,7 +41,7 @@ const AIMessage = ({ message }: { message: Message }) => {
             )}
         >
             {displayText}
-            <span className="animate-pulse">▍</span>
+            {!isComplete && <span className="animate-pulse">▍</span>}
         </div>
     )
 }
@@ -124,12 +99,18 @@ export default function AssistantPage() {
         });
 
         let fullText = "";
+        let firstChunk = true;
 
         for await (const chunk of stream) {
             fullText += chunk;
              setMessages((prev) => {
-                const lastMessage = prev[prev.length - 1];
-                const updatedLastMessage = { ...lastMessage, text: fullText, isLoading: false };
+                let lastMessage = prev[prev.length - 1];
+                if (firstChunk) {
+                    // Replace the "Thinking..." message on the first chunk
+                    lastMessage = { ...lastMessage, text: '', isLoading: false };
+                    firstChunk = false;
+                }
+                const updatedLastMessage = { ...lastMessage, text: fullText };
                 return [...prev.slice(0, -1), updatedLastMessage];
             });
         }
@@ -190,7 +171,7 @@ export default function AssistantPage() {
                                         <span>Thinking...</span>
                                     </div>
                                 ) : (
-                                    <AIMessage message={message} />
+                                    <AIMessage text={message.text} />
                                 )
                             )}
                              {message.sender === "user" && (

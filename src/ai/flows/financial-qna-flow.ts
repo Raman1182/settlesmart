@@ -39,7 +39,7 @@ export type FinancialQnAOutput = z.infer<typeof FinancialQnAOutputSchema>;
 export async function answerFinancialQuestion(
   input: FinancialQnAInput
 ): Promise<AsyncGenerator<string>> {
-  return financialQnAFlow(input);
+  return answerFinancialQuestionFlow(input);
 }
 
 const prompt = ai.definePrompt({
@@ -75,9 +75,9 @@ const prompt = ai.definePrompt({
   `,
 });
 
-const financialQnAFlow = ai.defineFlow(
+const answerFinancialQuestionFlow = ai.defineFlow(
   {
-    name: 'financialQnAFlow',
+    name: 'answerFinancialQuestionFlow',
     inputSchema: FinancialQnAInputSchema,
     outputSchema: z.string(),
   },
