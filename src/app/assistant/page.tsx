@@ -48,7 +48,7 @@ const AIMessage = ({ text }: { text: string }) => {
 
 
 export default function AssistantPage() {
-  const { expenses, groups, users, balances, currentUser } = useSettleSmart();
+  const { expenses, groups, users, balances, currentUser, isAuthLoading } = useSettleSmart();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isThinking, startThinkingTransition] = useTransition();
@@ -68,7 +68,7 @@ export default function AssistantPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || isThinking) return;
+    if (!input.trim() || isThinking || !currentUser) return;
 
     const userMessage: Message = {
       id: `msg-${Date.now()}`,
@@ -107,7 +107,7 @@ export default function AssistantPage() {
         let firstChunk = true;
 
         for await (const chunk of stream) {
-            if (chunk?.answer) {
+            if (chunk && 'answer' in chunk) {
               fullText += chunk.answer;
               setMessages((prev) => {
                   let lastMessage = prev[prev.length - 1];
@@ -133,6 +133,14 @@ export default function AssistantPage() {
       }
     });
   };
+
+  if (isAuthLoading || !currentUser) {
+    return (
+        <div className="flex items-center justify-center min-h-screen bg-background">
+            <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        </div>
+    );
+  }
 
   return (
     <div className="flex flex-col min-h-screen w-full">
