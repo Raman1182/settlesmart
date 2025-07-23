@@ -22,31 +22,6 @@ interface Message {
 
 const HISTORY_LIMIT = 6; // Keep the last 6 messages (3 user, 3 AI)
 
-const AIMessage = ({ text }: { text: string }) => {
-    const [isComplete, setIsComplete] = useState(false);
-    const [displayText, setDisplayText] = useState("");
-
-    useEffect(() => {
-        setDisplayText(text);
-        // A simple way to check if streaming is "done" for the blinking cursor
-        const timer = setTimeout(() => setIsComplete(true), 200);
-        return () => clearTimeout(timer);
-    }, [text]);
-
-    return (
-        <div
-            className={cn(
-            "max-w-sm md:max-w-md rounded-xl px-4 py-3 text-sm whitespace-pre-wrap",
-            "bg-muted"
-            )}
-        >
-            {displayText}
-            {!isComplete && <span className="animate-pulse">▍</span>}
-        </div>
-    )
-}
-
-
 export default function AssistantPage() {
   const { expenses, groups, users, balances, currentUser, isAuthLoading } = useSettleSmart();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -101,32 +76,19 @@ export default function AssistantPage() {
 
         console.log("SENDING PAYLOAD TO AI:", JSON.stringify(payload, null, 2));
 
-        const stream = await answerFinancialQuestion(payload);
+        const result = await answerFinancialQuestion(payload);
 
-        let fullText = "";
-        let firstChunk = true;
-
-        for await (const chunk of stream) {
-          if (chunk && typeof chunk.answer === "string") {
-            fullText += chunk.answer;
-            setMessages((prev) => {
-              let lastMessage = prev[prev.length - 1];
-              if (firstChunk) {
-                lastMessage = { ...lastMessage, text: "", isLoading: false };
-                firstChunk = false;
-              }
-              const updatedLastMessage = { ...lastMessage, text: fullText };
-              return [...prev.slice(0, -1), updatedLastMessage];
-            });
-          } else {
-            console.warn("Unexpected chunk from AI:", chunk);
-          }
+        if (!result || !result.answer) {
+             throw new Error("Empty response from AI");
         }
 
-        // Edge case: if the stream ended but no valid chunks were received
-        if (fullText.trim() === "") {
-          throw new Error("Empty response from AI");
-        }
+        const aiMessage: Message = {
+            id: `msg-${Date.now()}`,
+            text: result.answer,
+            sender: 'ai'
+        };
+
+        setMessages((prev) => [...prev.slice(0, -1), aiMessage]);
 
       } catch (error) {
         console.error("AI query failed:", error);
@@ -176,24 +138,20 @@ export default function AssistantPage() {
                                     <AvatarFallback><Sparkles className="w-4 h-4" /></AvatarFallback>
                                 </Avatar>
                             )}
-                            {message.sender === 'user' ? (
+                            {message.isLoading ? (
+                                <div className="flex items-center gap-2 bg-muted rounded-xl px-4 py-3 text-sm">
+                                    <Loader2 className="w-4 h-4 animate-spin"/>
+                                    <span>Thinking...</span>
+                                </div>
+                            ) : (
                                 <div
                                     className={cn(
                                     "max-w-sm md:max-w-md rounded-xl px-4 py-3 text-sm whitespace-pre-wrap",
-                                    "bg-primary text-primary-foreground"
+                                    message.sender === "user" ? "bg-primary text-primary-foreground" : "bg-muted"
                                     )}
                                 >
                                     {message.text}
                                 </div>
-                            ) : (
-                                message.isLoading ? (
-                                    <div className="flex items-center gap-2 bg-muted rounded-xl px-4 py-3 text-sm">
-                                        <Loader2 className="w-4 h-4 animate-spin"/>
-                                        <span>Thinking...</span>
-                                    </div>
-                                ) : (
-                                    <AIMessage text={message.text} />
-                                )
                             )}
                              {message.sender === "user" && currentUser && (
                                  <Avatar className="w-8 h-8">

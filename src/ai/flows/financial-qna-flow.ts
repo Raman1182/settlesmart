@@ -43,7 +43,7 @@ export const answerFinancialQuestion = ai.defineFlow(
     inputSchema: FinancialQnAInputSchema,
     outputSchema: FinancialQnAOutputSchema,
   },
-  async function* (input) {
+  async function (input) {
     console.log("AI FLOW RECEIVED PAYLOAD:", JSON.stringify(input, null, 2));
 
     const prompt = ai.definePrompt({
@@ -80,16 +80,22 @@ export const answerFinancialQuestion = ai.defineFlow(
     });
 
     const {stream} = await ai.generateStream({
-      prompt: await prompt.render(input),
-      output: {
-        schema: FinancialQnAOutputSchema,
-      },
+        prompt,
+        input,
+        output: {
+            schema: FinancialQnAOutputSchema,
+        },
     });
 
+    let fullAnswer = '';
     for await (const chunk of stream) {
-      if (chunk.output) {
-        yield chunk.output;
-      }
+        if (chunk.output?.answer) {
+            fullAnswer += chunk.output.answer;
+        }
     }
+
+    return {
+        answer: fullAnswer.trim() || "Sorry, I had trouble connecting to my brain. Please try again.",
+    };
   }
 );
