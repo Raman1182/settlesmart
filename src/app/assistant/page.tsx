@@ -107,17 +107,19 @@ export default function AssistantPage() {
         let firstChunk = true;
 
         for await (const chunk of stream) {
-            fullText += chunk;
-             setMessages((prev) => {
-                let lastMessage = prev[prev.length - 1];
-                if (firstChunk) {
-                    // Replace the "Thinking..." message on the first chunk
-                    lastMessage = { ...lastMessage, text: '', isLoading: false };
-                    firstChunk = false;
-                }
-                const updatedLastMessage = { ...lastMessage, text: fullText };
-                return [...prev.slice(0, -1), updatedLastMessage];
-            });
+            if (chunk?.answer) {
+              fullText += chunk.answer;
+              setMessages((prev) => {
+                  let lastMessage = prev[prev.length - 1];
+                  if (firstChunk) {
+                      // Replace the "Thinking..." message on the first chunk
+                      lastMessage = { ...lastMessage, text: '', isLoading: false };
+                      firstChunk = false;
+                  }
+                  const updatedLastMessage = { ...lastMessage, text: fullText };
+                  return [...prev.slice(0, -1), updatedLastMessage];
+              });
+            }
         }
 
       } catch (error) {

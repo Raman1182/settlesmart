@@ -41,7 +41,7 @@ export const answerFinancialQuestion = ai.defineFlow(
   {
     name: 'answerFinancialQuestionFlow',
     inputSchema: FinancialQnAInputSchema,
-    outputSchema: z.string(),
+    outputSchema: FinancialQnAOutputSchema,
   },
   async function* (input) {
     console.log("AI FLOW RECEIVED PAYLOAD:", JSON.stringify(input, null, 2));
@@ -80,15 +80,15 @@ export const answerFinancialQuestion = ai.defineFlow(
     });
 
     const {stream} = await ai.generateStream({
-      prompt: await prompt.renderText(input),
+      prompt: await prompt.render(input),
       output: {
         schema: FinancialQnAOutputSchema,
       },
     });
 
     for await (const chunk of stream) {
-      if (chunk.output?.answer) {
-        yield chunk.output.answer;
+      if (chunk.output) {
+        yield chunk.output;
       }
     }
   }
