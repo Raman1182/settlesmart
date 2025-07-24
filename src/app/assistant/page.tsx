@@ -65,7 +65,11 @@ export default function AssistantPage() {
 
     startThinkingTransition(async () => {
       try {
-        const history = currentMessages.slice(-HISTORY_LIMIT).map(({ id, isLoading, ...rest }) => rest);
+        // Only include valid messages with non-empty text
+        const history = currentMessages
+          .slice(-HISTORY_LIMIT)
+          .filter((msg) => typeof msg.text === 'string' && msg.text.trim() !== '')
+          .map(({ id, isLoading, ...rest }) => rest);
         const context = { expenses, groups, users, balances, currentUser };
 
         const payload = {
