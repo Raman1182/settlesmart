@@ -407,7 +407,6 @@ export default function FriendsPage() {
                                     </Avatar>
                                     <div className="flex-1">
                                         <p className="font-semibold">{user.name}</p>
-                                        <p className="text-sm text-muted-foreground">{user.email}</p>
                                     </div>
                                     <Button size="sm" onClick={() => handleSendRequest(user.id)} disabled={isProcessing || isRequestSent}>
                                       {isRequestSent ? (
