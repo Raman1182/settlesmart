@@ -60,7 +60,7 @@ Tired of the "I'll get the next one" promises that never materialize? SettleSmar
 
 - **Frontend**: Next.js 13+, TypeScript, Tailwind CSS
 - **Backend**: Firebase Authentication, Firestore
-- **AI**: Custom ML models for expense categorization and insights
+- **AI**: Gemini
 - **UI/UX**: Radix UI, Framer Motion
 
 ---
